@@ -111,6 +111,36 @@ pub fn load_core_materials(textures: &mut TextureManager) -> Vec<Material> {
     ]
 }
 
+/// Materiales adicionales que enriquecen la escena (sección 8 del plan):
+/// agua y césped. No cuentan para el mínimo de cinco materiales calificables,
+/// pero también tienen textura y parámetros propios.
+pub fn load_extra_materials(textures: &mut TextureManager) -> Vec<Material> {
+    vec![
+        Material::new(
+            "Agua",
+            textures.load("assets/textures/water.png"),
+            Color::new(0.05, 0.25, 0.36),
+            0.90,
+            160.0,
+            0.45,
+            0.35,
+            1.333,
+            Color::BLACK,
+        ),
+        Material::new(
+            "Césped",
+            textures.load("assets/textures/grass.png"),
+            Color::new(0.25, 0.65, 0.18),
+            0.08,
+            8.0,
+            0.00,
+            0.01,
+            1.00,
+            Color::BLACK,
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

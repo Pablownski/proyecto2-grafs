@@ -1,21 +1,17 @@
 use std::time::Instant;
 
 use minifb::{Key, Window, WindowOptions};
-use nalgebra_glm::{normalize, vec2, vec3};
+use nalgebra_glm::vec3;
 
+use crate::agency;
 use crate::camera::OrbitCamera;
-use crate::color::Color;
 use crate::config::{
     FB_HEIGHT, FB_WIDTH, MAX_DT, ORBIT_PITCH_SPEED, ORBIT_SCROLL_ZOOM_FACTOR, ORBIT_YAW_SPEED,
     ORBIT_ZOOM_SPEED, WINDOW_SCALE, WINDOW_TITLE,
 };
-use crate::cube::Cube;
 use crate::framebuffer::Framebuffer;
-use crate::light::Light;
-use crate::material::{Material, load_core_materials};
 use crate::renderer::{self, RenderParams};
 use crate::scene::Scene;
-use crate::skybox::Skybox;
 
 pub struct App {
     window: Window,
@@ -37,9 +33,11 @@ impl App {
         .expect("failed to create window");
 
         let framebuffer = Framebuffer::new(FB_WIDTH, FB_HEIGHT);
-        let scene = build_demo_scene();
+        let mut scene = Scene::new();
+        agency::build(&mut scene);
+
         let aspect = FB_WIDTH as f32 / FB_HEIGHT as f32;
-        let camera = OrbitCamera::new(vec3(1.4, 0.0, -1.0), 0.0, 0.3, 9.0, 60f32.to_radians());
+        let camera = OrbitCamera::new(vec3(0.0, 6.0, 12.0), 0.15, 0.35, 55.0, 55f32.to_radians());
         let render_params = camera.render_params(aspect);
 
         Self {
@@ -115,73 +113,6 @@ impl App {
         }
         changed
     }
-}
-
-/// Escena temporal de la Fase 2-4: los cinco materiales principales aplicados
-/// a cubos a distintas profundidades, para validar intersección, cámara
-/// orbital y muestreo de texturas. Se reemplaza por `agency::build` en la
-/// Fase 8.
-fn build_demo_scene() -> Scene {
-    let mut scene = Scene::new();
-    scene.materials = load_core_materials(&mut scene.textures);
-
-    // Piedra, mármol, madera, vidrio, metal (índices 0..4 de load_core_materials).
-    let mut stone = Cube::new(vec3(-3.0, -1.0, -1.0), vec3(-1.5, 0.5, 0.5), 0);
-    stone.uv_scale = vec2(2.0, 2.0);
-    let mut marble = Cube::new(vec3(-1.0, -1.0, -1.5), vec3(0.5, 0.5, 0.0), 1);
-    marble.uv_scale = vec2(1.5, 1.5);
-    let mut wood = Cube::new(vec3(0.8, -1.0, -2.0), vec3(2.3, 0.5, -0.5), 2);
-    wood.uv_scale = vec2(2.0, 1.0);
-    let mut glass_cube = Cube::new(vec3(2.6, -1.0, -1.0), vec3(4.1, 0.5, 0.5), 3);
-    glass_cube.uv_scale = vec2(1.0, 1.0);
-    let mut metal = Cube::new(vec3(4.4, -1.0, -1.5), vec3(5.9, 0.5, 0.0), 4);
-    metal.uv_scale = vec2(2.0, 1.0);
-
-    // Piso: misma textura de piedra pero con albedo más oscuro, para que no
-    // se confunda visualmente con el cubo de piedra que descansa sobre él.
-    let stone_texture_id = scene.materials[0].texture_id;
-    let floor_material_id = scene.materials.len();
-    scene.materials.push(Material::new(
-        "Piedra del piso",
-        stone_texture_id,
-        Color::new(0.45, 0.42, 0.36),
-        0.10,
-        16.0,
-        0.0,
-        0.02,
-        1.0,
-        Color::BLACK,
-    ));
-    let mut floor = Cube::new(
-        vec3(-20.0, -1.5, -20.0),
-        vec3(20.0, -1.0, 20.0),
-        floor_material_id,
-    );
-    floor.uv_scale = vec2(8.0, 8.0);
-
-    scene.cubes.push(stone);
-    scene.cubes.push(marble);
-    scene.cubes.push(wood);
-    scene.cubes.push(glass_cube);
-    scene.cubes.push(metal);
-    scene.cubes.push(floor);
-
-    // Sol cálido direccional + luz puntual fría, para ver sombras, volumen y
-    // el specular distinto entre metal y piedra.
-    scene.lights.push(Light::Directional {
-        direction: normalize(&vec3(-0.35, -0.85, -0.4)),
-        color: Color::new(1.0, 0.95, 0.85),
-        intensity: 1.0,
-    });
-    scene.lights.push(Light::Point {
-        position: vec3(1.4, 3.5, 3.0),
-        color: Color::new(0.55, 0.75, 1.0),
-        intensity: 6.0,
-    });
-
-    scene.skybox = Some(Skybox::load(&mut scene.textures, "assets/skybox"));
-
-    scene
 }
 
 impl Default for App {

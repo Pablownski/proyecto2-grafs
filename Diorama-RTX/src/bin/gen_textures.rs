@@ -98,6 +98,34 @@ fn brushed_metal() -> RgbImage {
     img
 }
 
+fn grass() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let blade = ((x as f32 * 0.6 + y as f32 * 0.2).sin() * 0.5 + 0.5) * 0.10;
+            let noise = (hash_noise(x, y, 113) - 0.5) * 0.14;
+            let v = 0.42 + blade + noise;
+            img.put_pixel(x, y, Rgb([to_u8(v * 0.55), to_u8(v), to_u8(v * 0.40)]));
+        }
+    }
+    img
+}
+
+fn water() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let fx = x as f32;
+            let fy = y as f32;
+            let ripple = ((fx * 0.25).sin() * (fy * 0.2).sin() * 0.5 + 0.5) * 0.15;
+            let noise = (hash_noise(x, y, 127) - 0.5) * 0.03;
+            let v = 0.30 + ripple + noise;
+            img.put_pixel(x, y, Rgb([to_u8(v * 0.35), to_u8(v * 0.75), to_u8(v)]));
+        }
+    }
+    img
+}
+
 // Paleta compartida del skybox: el horizonte de los cuatro muros coincide con
 // el borde exterior de las caras top/bottom, así que no hay costuras visibles
 // aunque cada cara se genere de forma independiente.
@@ -206,12 +234,14 @@ fn main() {
     let dir = "assets/textures";
     std::fs::create_dir_all(dir).expect("failed to create assets/textures");
 
-    let textures: [(&str, Generator); 5] = [
+    let textures: [(&str, Generator); 7] = [
         ("agency_stone.png", agency_stone),
         ("black_marble.png", black_marble),
         ("wood_panel.png", wood_panel),
         ("glass.png", glass),
         ("brushed_metal.png", brushed_metal),
+        ("grass.png", grass),
+        ("water.png", water),
     ];
 
     for (name, generator) in textures {

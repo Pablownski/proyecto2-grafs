@@ -9,8 +9,8 @@ use crate::renderer::RenderParams;
 const MIN_PITCH: f32 = -1.45;
 const MAX_PITCH: f32 = 1.45;
 
-const MIN_RADIUS: f32 = 3.0;
-const MAX_RADIUS: f32 = 40.0;
+const MIN_RADIUS: f32 = 4.0;
+const MAX_RADIUS: f32 = 100.0;
 
 pub struct OrbitCamera {
     pub target: Vec3,
