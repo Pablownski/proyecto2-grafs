@@ -98,6 +98,108 @@ fn brushed_metal() -> RgbImage {
     img
 }
 
+// Paleta compartida del skybox: el horizonte de los cuatro muros coincide con
+// el borde exterior de las caras top/bottom, así que no hay costuras visibles
+// aunque cada cara se genere de forma independiente.
+const HORIZON: (f32, f32, f32) = (0.55, 0.42, 0.30);
+const ZENITH: (f32, f32, f32) = (0.15, 0.30, 0.55);
+const DEEP_ZENITH: (f32, f32, f32) = (0.08, 0.20, 0.45);
+const GROUND: (f32, f32, f32) = (0.10, 0.09, 0.08);
+const SUN_GLOW: (f32, f32, f32) = (1.0, 0.85, 0.55);
+
+fn lerp3(a: (f32, f32, f32), b: (f32, f32, f32), t: f32) -> (f32, f32, f32) {
+    let t = t.clamp(0.0, 1.0);
+    (
+        a.0 + (b.0 - a.0) * t,
+        a.1 + (b.1 - a.1) * t,
+        a.2 + (b.2 - a.2) * t,
+    )
+}
+
+/// Cara lateral del skybox: degradado horizonte (abajo) -> cenit (arriba).
+/// La cara `front` además lleva un resplandor solar contenido lejos de los
+/// bordes, para no romper la continuidad con las caras vecinas.
+fn sky_side(with_sun: bool) -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let v = 1.0 - (y as f32 + 0.5) / SIZE as f32;
+            let (mut r, mut g, mut b) = lerp3(HORIZON, ZENITH, v);
+
+            if with_sun {
+                let u = (x as f32 + 0.5) / SIZE as f32;
+                let dx = u - 0.5;
+                let dy = v - 0.62;
+                let dist = (dx * dx + dy * dy).sqrt();
+                let glow = (1.0 - (dist / 0.30).min(1.0)).powf(3.0);
+                r += (SUN_GLOW.0 - r) * glow;
+                g += (SUN_GLOW.1 - g) * glow;
+                b += (SUN_GLOW.2 - b) * glow;
+            }
+
+            let noise = (hash_noise(x, y, 71) - 0.5) * 0.015;
+            img.put_pixel(
+                x,
+                y,
+                Rgb([to_u8(r + noise), to_u8(g + noise), to_u8(b + noise)]),
+            );
+        }
+    }
+    img
+}
+
+/// Cara superior: degradado radial cenit profundo (centro) -> cenit de borde
+/// (orilla), que coincide con el tope de las caras laterales.
+fn sky_top() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    let center = (SIZE as f32 - 1.0) / 2.0;
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = (x as f32 - center) / center;
+            let dy = (y as f32 - center) / center;
+            let r_dist = (dx * dx + dy * dy).sqrt().min(1.0);
+            let (r, g, b) = lerp3(DEEP_ZENITH, ZENITH, r_dist);
+            let noise = (hash_noise(x, y, 83) - 0.5) * 0.01;
+            img.put_pixel(
+                x,
+                y,
+                Rgb([to_u8(r + noise), to_u8(g + noise), to_u8(b + noise)]),
+            );
+        }
+    }
+    img
+}
+
+/// Cara inferior: degradado radial suelo (centro) -> horizonte de borde
+/// (orilla), que coincide con la base de las caras laterales.
+fn sky_bottom() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    let center = (SIZE as f32 - 1.0) / 2.0;
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = (x as f32 - center) / center;
+            let dy = (y as f32 - center) / center;
+            let r_dist = (dx * dx + dy * dy).sqrt().min(1.0);
+            let (r, g, b) = lerp3(GROUND, HORIZON, r_dist);
+            let noise = (hash_noise(x, y, 97) - 0.5) * 0.01;
+            img.put_pixel(
+                x,
+                y,
+                Rgb([to_u8(r + noise), to_u8(g + noise), to_u8(b + noise)]),
+            );
+        }
+    }
+    img
+}
+
+fn sky_side_plain() -> RgbImage {
+    sky_side(false)
+}
+
+fn sky_side_with_sun() -> RgbImage {
+    sky_side(true)
+}
+
 type Generator = fn() -> RgbImage;
 
 fn main() {
@@ -114,6 +216,26 @@ fn main() {
 
     for (name, generator) in textures {
         let path = format!("{dir}/{name}");
+        generator()
+            .save(&path)
+            .unwrap_or_else(|e| panic!("failed to save {path}: {e}"));
+        println!("generated {path}");
+    }
+
+    let skybox_dir = "assets/skybox";
+    std::fs::create_dir_all(skybox_dir).expect("failed to create assets/skybox");
+
+    let skybox: [(&str, Generator); 6] = [
+        ("right.png", sky_side_plain),
+        ("left.png", sky_side_plain),
+        ("top.png", sky_top),
+        ("bottom.png", sky_bottom),
+        ("front.png", sky_side_with_sun),
+        ("back.png", sky_side_plain),
+    ];
+
+    for (name, generator) in skybox {
+        let path = format!("{skybox_dir}/{name}");
         generator()
             .save(&path)
             .unwrap_or_else(|e| panic!("failed to save {path}: {e}"));

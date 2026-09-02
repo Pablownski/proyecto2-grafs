@@ -15,6 +15,7 @@ use crate::light::Light;
 use crate::material::{Material, load_core_materials};
 use crate::renderer::{self, RenderParams};
 use crate::scene::Scene;
+use crate::skybox::Skybox;
 
 pub struct App {
     window: Window,
@@ -177,6 +178,8 @@ fn build_demo_scene() -> Scene {
         color: Color::new(0.55, 0.75, 1.0),
         intensity: 6.0,
     });
+
+    scene.skybox = Some(Skybox::load(&mut scene.textures, "assets/skybox"));
 
     scene
 }

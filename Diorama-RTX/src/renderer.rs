@@ -57,17 +57,23 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
     }
 }
 
-fn background_color() -> Color {
-    // Se reemplaza por el muestreo del cubemap en la Fase 7.
-    Color::new(0.05, 0.06, 0.10)
+/// Color del cielo cuando un rayo no golpea geometría: el cubemap del skybox
+/// si ya está cargado, o un azul plano de reserva mientras no lo esté.
+fn background_color(scene: &Scene, direction: Vec3) -> Color {
+    match &scene.skybox {
+        Some(skybox) => skybox.sample(direction, &scene.textures),
+        None => Color::new(0.05, 0.06, 0.10),
+    }
 }
 
 /// Traza un rayo primario o secundario: impacto más cercano -> sombreado
-/// local + reflexión/refracción recursivas hasta `depth == 0`.
+/// local + reflexión/refracción recursivas hasta `depth == 0`. El skybox
+/// también se ve en rayos secundarios (reflejos, refracción), porque todos
+/// pasan por esta misma función.
 fn trace(scene: &Scene, ray: &Ray, depth: u32) -> Color {
     match scene.closest_hit(ray, EPSILON, f32::INFINITY) {
         Some(hit) => shade(scene, &hit, ray, depth),
-        None => background_color(),
+        None => background_color(scene, ray.direction),
     }
 }
 

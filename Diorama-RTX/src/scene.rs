@@ -3,6 +3,7 @@ use crate::hit::HitRecord;
 use crate::light::Light;
 use crate::material::Material;
 use crate::ray::Ray;
+use crate::skybox::Skybox;
 use crate::texture::TextureManager;
 
 pub struct Scene {
@@ -10,6 +11,7 @@ pub struct Scene {
     pub materials: Vec<Material>,
     pub textures: TextureManager,
     pub lights: Vec<Light>,
+    pub skybox: Option<Skybox>,
 }
 
 impl Scene {
@@ -19,6 +21,7 @@ impl Scene {
             materials: Vec::new(),
             textures: TextureManager::new(),
             lights: Vec::new(),
+            skybox: None,
         }
     }
 

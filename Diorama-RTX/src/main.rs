@@ -10,6 +10,7 @@ mod material;
 mod ray;
 mod renderer;
 mod scene;
+mod skybox;
 mod texture;
 
 use app::App;
