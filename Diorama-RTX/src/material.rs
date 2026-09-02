@@ -199,6 +199,25 @@ pub fn load_preview_materials(textures: &mut TextureManager) -> Vec<Material> {
     ]
 }
 
+/// Piso oscuro mate para el atrio: mismo tono que el mármol negro, pero sin
+/// especular/reflectividad. Un piso grande, plano y muy brillante con un
+/// solo rayo por píxel produce "aliasing especular" (ruido tipo estática)
+/// que ni bajar la reflectividad del mármol resolvía del todo; el mármol
+/// reflectivo se conserva en columnas, barandales y la escultura.
+pub fn load_interior_materials(textures: &mut TextureManager) -> Vec<Material> {
+    vec![Material::new(
+        "Piso oscuro mate",
+        textures.load("assets/textures/black_marble.png"),
+        Color::new(0.12, 0.14, 0.18),
+        0.05,
+        8.0,
+        0.0,
+        0.0,
+        1.0,
+        Color::BLACK,
+    )]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

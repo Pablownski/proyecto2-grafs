@@ -8,7 +8,8 @@ use crate::color::Color;
 use crate::cube::Cube;
 use crate::light::Light;
 use crate::material::{
-    load_core_materials, load_extra_materials, load_glow_materials, load_preview_materials,
+    load_core_materials, load_extra_materials, load_glow_materials, load_interior_materials,
+    load_preview_materials,
 };
 use crate::scene::Scene;
 use crate::skybox::Skybox;
@@ -26,6 +27,7 @@ const SCREEN: usize = 7;
 const CHEST: usize = 8;
 pub(crate) const PREVIEW_VALID: usize = 9;
 pub(crate) const PREVIEW_INVALID: usize = 10;
+const MATTE_FLOOR: usize = 11;
 
 // Niveles del terreno (ver sección 5.2: +Y arriba, plano XZ horizontal).
 const WATER_TOP: f32 = -2.0;
@@ -392,7 +394,8 @@ fn build_atrium(scene: &mut Scene) {
     let width = ATRIUM_MAX_X - ATRIUM_MIN_X;
     let depth = ATRIUM_BACK_Z - ATRIUM_FRONT_Z;
 
-    // Piso oscuro pulido (mármol) y techo.
+    // Piso oscuro (mate, no mármol reflectivo): un piso grande y plano muy
+    // brillante genera ruido de aliasing especular con 1 rayo por píxel.
     add_box(
         scene,
         vec3(
@@ -401,7 +404,7 @@ fn build_atrium(scene: &mut Scene) {
             (ATRIUM_FRONT_Z + ATRIUM_BACK_Z) * 0.5,
         ),
         vec3(width, 0.3, depth),
-        MARBLE,
+        MATTE_FLOOR,
     );
     add_box(
         scene,
@@ -483,7 +486,7 @@ fn build_atrium(scene: &mut Scene) {
                 (ATRIUM_FRONT_Z + ATRIUM_BACK_Z) * 0.5,
             ),
             vec3(3.0, 0.3, depth - 2.0),
-            MARBLE,
+            MATTE_FLOOR,
         );
         let rail_x = x_wall + sign * 3.0;
         add_box(
@@ -778,6 +781,9 @@ pub fn build(scene: &mut Scene) {
     scene
         .materials
         .extend(load_preview_materials(&mut scene.textures));
+    scene
+        .materials
+        .extend(load_interior_materials(&mut scene.textures));
 
     build_water_and_island(scene);
     build_dock(scene);
