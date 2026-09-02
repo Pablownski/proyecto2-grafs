@@ -1,3 +1,10 @@
+mod app;
+mod config;
+mod framebuffer;
+
+use app::App;
+
 fn main() {
-    println!("Hello, world!");
+    let mut app = App::new();
+    app.run();
 }
