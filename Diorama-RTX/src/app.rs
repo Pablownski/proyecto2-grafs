@@ -1,14 +1,15 @@
 use std::time::Instant;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
-use nalgebra_glm::vec3;
+use nalgebra_glm::{Vec3, vec3};
 
 use crate::agency;
 use crate::camera::OrbitCamera;
+use crate::collision;
 use crate::config::{
-    FB_HEIGHT, FB_WIDTH, MAX_DT, ORBIT_PITCH_SPEED, ORBIT_SCROLL_ZOOM_FACTOR, ORBIT_YAW_SPEED,
-    ORBIT_ZOOM_SPEED, PLAYER_FOV_DEGREES, PLAYER_LOOK_PITCH_SPEED, PLAYER_LOOK_YAW_SPEED,
-    PLAYER_RUN_SPEED, PLAYER_WALK_SPEED, WINDOW_SCALE, WINDOW_TITLE,
+    FB_HEIGHT, FB_WIDTH, JUMP_SPEED, MAX_DT, ORBIT_PITCH_SPEED, ORBIT_SCROLL_ZOOM_FACTOR,
+    ORBIT_YAW_SPEED, ORBIT_ZOOM_SPEED, PLAYER_FOV_DEGREES, PLAYER_LOOK_PITCH_SPEED,
+    PLAYER_LOOK_YAW_SPEED, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED, WINDOW_SCALE, WINDOW_TITLE,
 };
 use crate::framebuffer::Framebuffer;
 use crate::player::Player;
@@ -151,8 +152,9 @@ impl App {
         changed
     }
 
-    /// `WASD` mueve al jugador según hacia dónde mira; las flechas giran la
-    /// mirada (yaw/pitch); `Shift` corre. Devuelve `true` si algo cambió.
+    /// `WASD` mueve al jugador según hacia dónde mira (con colisión y
+    /// gravedad); las flechas giran la mirada (yaw/pitch); `Shift` corre;
+    /// `Espacio` salta. Devuelve `true` si algo cambió.
     fn handle_first_person_input(&mut self, dt: f32) -> bool {
         let mut delta_yaw = 0.0f32;
         let mut delta_pitch = 0.0f32;
@@ -187,8 +189,7 @@ impl App {
             strafe -= 1.0;
         }
 
-        let moving = forward != 0.0 || strafe != 0.0;
-        if moving {
+        let horizontal_delta = if forward != 0.0 || strafe != 0.0 {
             let running =
                 self.window.is_key_down(Key::LeftShift) || self.window.is_key_down(Key::RightShift);
             let speed = if running {
@@ -196,10 +197,21 @@ impl App {
             } else {
                 PLAYER_WALK_SPEED
             };
-            self.player.walk(forward, strafe, speed, dt);
+            self.player
+                .horizontal_move_vector(forward, strafe, speed, dt)
+        } else {
+            Vec3::zeros()
+        };
+
+        if self.window.is_key_pressed(Key::Space, KeyRepeat::No) {
+            self.player.jump(JUMP_SPEED);
         }
 
-        moving || delta_yaw != 0.0 || delta_pitch != 0.0
+        let position_before = self.player.position;
+        collision::move_player(&self.scene, &mut self.player, horizontal_delta, dt);
+        let moved = (self.player.position - position_before).norm() > 1e-4;
+
+        moved || delta_yaw != 0.0 || delta_pitch != 0.0
     }
 }
 
@@ -207,7 +219,7 @@ fn print_controls_help() {
     println!("=== Controles ===");
     println!("Tab: cambiar camara orbital / primera persona");
     println!("Orbital -> Flechas: orbitar | Q/E o rueda: acercar/alejar");
-    println!("Primera persona -> WASD: moverse | Flechas: mirar | Shift: correr");
+    println!("Primera persona -> WASD: moverse | Flechas: mirar | Shift: correr | Espacio: saltar");
     println!("F1: mostrar esta ayuda | Escape: salir");
 }
 

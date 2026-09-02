@@ -14,10 +14,7 @@ pub struct Player {
     pub position: Vec3,
     pub yaw: f32,
     pub pitch: f32,
-    // Reservados para la Fase 11 (gravedad, salto y colisiones).
-    #[allow(dead_code)]
     pub velocity: Vec3,
-    #[allow(dead_code)]
     pub grounded: bool,
 }
 
@@ -47,15 +44,26 @@ impl Player {
         normalize(&cross(&self.forward_flat(), &vec3(0.0, 1.0, 0.0)))
     }
 
-    /// Mueve al jugador sobre el plano XZ según la mirada actual. `forward`
-    /// y `strafe` esperan valores en `[-1, 1]`; la diagonal se normaliza para
-    /// que W+A no sea más rápido que W solo.
-    pub fn walk(&mut self, forward: f32, strafe: f32, speed: f32, dt: f32) {
+    /// Vector de desplazamiento horizontal deseado según la mirada actual;
+    /// no mueve al jugador (eso lo hace `collision::move_player`, eje por
+    /// eje). `forward`/`strafe` esperan valores en `[-1, 1]`; la diagonal se
+    /// normaliza para que W+A no sea más rápido que W solo.
+    pub fn horizontal_move_vector(&self, forward: f32, strafe: f32, speed: f32, dt: f32) -> Vec3 {
         let mut direction = self.forward_flat() * forward + self.right_flat() * strafe;
         let len = direction.norm();
         if len > 1e-6 {
             direction /= len;
-            self.position += direction * speed * dt;
+            direction * speed * dt
+        } else {
+            Vec3::zeros()
+        }
+    }
+
+    /// Salta solo si el jugador está apoyado en el suelo.
+    pub fn jump(&mut self, jump_speed: f32) {
+        if self.grounded {
+            self.velocity.y = jump_speed;
+            self.grounded = false;
         }
     }
 
@@ -90,32 +98,43 @@ mod tests {
 
     #[test]
     fn walk_forward_moves_towards_where_the_player_looks() {
-        let mut player = Player::new(Vec3::zeros(), 0.0);
-        player.walk(1.0, 0.0, 4.0, 1.0);
+        let player = Player::new(Vec3::zeros(), 0.0);
+        let delta = player.horizontal_move_vector(1.0, 0.0, 4.0, 1.0);
         let expected = player.forward_flat() * 4.0;
-        assert!((player.position - expected).norm() < 1e-5);
+        assert!((delta - expected).norm() < 1e-5);
     }
 
     #[test]
     fn walk_after_turning_moves_along_new_forward() {
         let mut player = Player::new(Vec3::zeros(), 0.0);
         player.look(std::f32::consts::FRAC_PI_2, 0.0);
-        player.walk(1.0, 0.0, 2.0, 1.0);
+        let delta = player.horizontal_move_vector(1.0, 0.0, 2.0, 1.0);
         let expected = player.forward_flat() * 2.0;
-        assert!((player.position - expected).norm() < 1e-5);
+        assert!((delta - expected).norm() < 1e-5);
         // Con yaw = 90°, mirar hacia adelante ya no coincide con +Z original.
-        assert!(player.position.z.abs() < 1e-4);
+        assert!(delta.z.abs() < 1e-4);
     }
 
     #[test]
     fn diagonal_movement_is_not_faster_than_straight() {
-        let mut forward_only = Player::new(Vec3::zeros(), 0.0);
-        forward_only.walk(1.0, 0.0, 4.0, 1.0);
+        let player = Player::new(Vec3::zeros(), 0.0);
+        let forward_only = player.horizontal_move_vector(1.0, 0.0, 4.0, 1.0);
+        let diagonal = player.horizontal_move_vector(1.0, 1.0, 4.0, 1.0);
 
-        let mut diagonal = Player::new(Vec3::zeros(), 0.0);
-        diagonal.walk(1.0, 1.0, 4.0, 1.0);
+        assert!((forward_only.norm() - diagonal.norm()).abs() < 1e-4);
+    }
 
-        assert!((forward_only.position.norm() - diagonal.position.norm()).abs() < 1e-4);
+    #[test]
+    fn jump_only_works_when_grounded() {
+        let mut player = Player::new(Vec3::zeros(), 0.0);
+        player.grounded = false;
+        player.jump(7.5);
+        assert_eq!(player.velocity.y, 0.0);
+
+        player.grounded = true;
+        player.jump(7.5);
+        assert_eq!(player.velocity.y, 7.5);
+        assert!(!player.grounded);
     }
 
     #[test]

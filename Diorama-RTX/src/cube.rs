@@ -9,9 +9,8 @@ pub struct Cube {
     pub max: Vec3,
     pub material_id: usize,
     pub uv_scale: Vec2,
-    // Se usan a partir de Fase 11 (colisiones) y Fase 12 (construcción).
-    #[allow(dead_code)]
     pub collidable: bool,
+    // Se usa a partir de Fase 12 (construcción).
     #[allow(dead_code)]
     pub build_piece: bool,
 }

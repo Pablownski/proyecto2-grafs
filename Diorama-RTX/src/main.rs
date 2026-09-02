@@ -1,6 +1,7 @@
 mod agency;
 mod app;
 mod camera;
+mod collision;
 mod color;
 mod config;
 mod cube;

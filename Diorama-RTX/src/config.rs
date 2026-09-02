@@ -30,3 +30,13 @@ pub const PLAYER_LOOK_YAW_SPEED: f32 = 1.6; // rad/s
 pub const PLAYER_LOOK_PITCH_SPEED: f32 = 1.2; // rad/s
 pub const PLAYER_EYE_HEIGHT: f32 = 1.6;
 pub const PLAYER_FOV_DEGREES: f32 = 70.0;
+
+// Colisiones y salto (Fase 11).
+pub const PLAYER_HEIGHT: f32 = 1.8;
+pub const PLAYER_RADIUS: f32 = 0.30;
+pub const GRAVITY: f32 = -18.0;
+pub const JUMP_SPEED: f32 = 7.5;
+/// Altura máxima de escalón que el jugador puede subir caminando.
+pub const STEP_HEIGHT: f32 = 0.55;
+/// Pequeño margen para no quedar exactamente al ras de una superficie.
+pub const COLLISION_MARGIN: f32 = 0.01;
