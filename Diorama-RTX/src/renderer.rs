@@ -1,5 +1,4 @@
 use nalgebra_glm::{Vec3, cross, normalize};
-use rayon::prelude::*;
 
 use crate::color::Color;
 use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_TRACE_DEPTH};
@@ -49,20 +48,13 @@ fn primary_ray(params: &RenderParams, x: usize, y: usize, width: usize, height: 
 }
 
 pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffer) {
-    let width = framebuffer.width;
-    let height = framebuffer.height;
-
-    framebuffer
-        .as_mut_slice()
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(y, row)| {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                let ray = primary_ray(params, x, y, width, height);
-                let color = trace(scene, &ray, MAX_TRACE_DEPTH);
-                *pixel = color.to_u32();
-            }
-        });
+    for y in 0..framebuffer.height {
+        for x in 0..framebuffer.width {
+            let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
+            let color = trace(scene, &ray, MAX_TRACE_DEPTH);
+            framebuffer.set_pixel(x, y, color.to_u32());
+        }
+    }
 }
 
 /// Color del cielo cuando un rayo no golpea geometría: el cubemap del skybox
