@@ -4,13 +4,14 @@ use minifb::{Key, Window, WindowOptions};
 use nalgebra_glm::{vec2, vec3};
 
 use crate::camera::OrbitCamera;
+use crate::color::Color;
 use crate::config::{
     FB_HEIGHT, FB_WIDTH, MAX_DT, ORBIT_PITCH_SPEED, ORBIT_SCROLL_ZOOM_FACTOR, ORBIT_YAW_SPEED,
     ORBIT_ZOOM_SPEED, WINDOW_SCALE, WINDOW_TITLE,
 };
 use crate::cube::Cube;
 use crate::framebuffer::Framebuffer;
-use crate::material::load_core_materials;
+use crate::material::{Material, load_core_materials};
 use crate::renderer::{self, RenderParams};
 use crate::scene::Scene;
 
@@ -134,8 +135,26 @@ fn build_demo_scene() -> Scene {
     let mut metal = Cube::new(vec3(4.4, -1.0, -1.5), vec3(5.9, 0.5, 0.0), 4);
     metal.uv_scale = vec2(2.0, 1.0);
 
-    // Piso: reutiliza la piedra con un mosaico grande.
-    let mut floor = Cube::new(vec3(-20.0, -1.5, -20.0), vec3(20.0, -1.0, 20.0), 0);
+    // Piso: misma textura de piedra pero con albedo más oscuro, para que no
+    // se confunda visualmente con el cubo de piedra que descansa sobre él.
+    let stone_texture_id = scene.materials[0].texture_id;
+    let floor_material_id = scene.materials.len();
+    scene.materials.push(Material::new(
+        "Piedra del piso",
+        stone_texture_id,
+        Color::new(0.45, 0.42, 0.36),
+        0.10,
+        16.0,
+        0.0,
+        0.02,
+        1.0,
+        Color::BLACK,
+    ));
+    let mut floor = Cube::new(
+        vec3(-20.0, -1.5, -20.0),
+        vec3(20.0, -1.0, 20.0),
+        floor_material_id,
+    );
     floor.uv_scale = vec2(8.0, 8.0);
 
     scene.cubes.push(stone);
