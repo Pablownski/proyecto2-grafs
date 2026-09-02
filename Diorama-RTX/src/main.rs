@@ -8,6 +8,7 @@ mod framebuffer;
 mod hit;
 mod light;
 mod material;
+mod player;
 mod ray;
 mod renderer;
 mod scene;

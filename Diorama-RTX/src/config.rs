@@ -22,3 +22,11 @@ pub const AMBIENT_STRENGTH: f32 = 0.06;
 /// Límite de rebotes recursivos de reflexión/refracción (Fase 6). Modo de
 /// calidad; el modo interactivo reducido llega en la Fase 13.
 pub const MAX_TRACE_DEPTH: u32 = 4;
+
+// Primera persona (Fase 10).
+pub const PLAYER_WALK_SPEED: f32 = 4.0; // unidades/s
+pub const PLAYER_RUN_SPEED: f32 = 7.0; // unidades/s, con Shift
+pub const PLAYER_LOOK_YAW_SPEED: f32 = 1.6; // rad/s
+pub const PLAYER_LOOK_PITCH_SPEED: f32 = 1.2; // rad/s
+pub const PLAYER_EYE_HEIGHT: f32 = 1.6;
+pub const PLAYER_FOV_DEGREES: f32 = 70.0;
