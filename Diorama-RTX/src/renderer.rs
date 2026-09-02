@@ -1,4 +1,5 @@
 use nalgebra_glm::{Vec3, cross, normalize};
+use rayon::prelude::*;
 
 use crate::color::Color;
 use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_TRACE_DEPTH};
@@ -48,13 +49,20 @@ fn primary_ray(params: &RenderParams, x: usize, y: usize, width: usize, height: 
 }
 
 pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffer) {
-    for y in 0..framebuffer.height {
-        for x in 0..framebuffer.width {
-            let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
-            let color = trace(scene, &ray, MAX_TRACE_DEPTH);
-            framebuffer.set_pixel(x, y, color.to_u32());
-        }
-    }
+    let width = framebuffer.width;
+    let height = framebuffer.height;
+
+    framebuffer
+        .as_mut_slice()
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(y, row)| {
+            for (x, pixel) in row.iter_mut().enumerate() {
+                let ray = primary_ray(params, x, y, width, height);
+                let color = trace(scene, &ray, MAX_TRACE_DEPTH);
+                *pixel = color.to_u32();
+            }
+        });
 }
 
 /// Color del cielo cuando un rayo no golpea geometría: el cubemap del skybox
@@ -89,7 +97,9 @@ fn shade(scene: &Scene, hit: &HitRecord, ray: &Ray, depth: u32) -> Color {
     let albedo = material.albedo.mul_color(tex_color);
     let view_dir = -ray.direction;
 
-    let mut color = albedo * AMBIENT_STRENGTH;
+    // La emisión brilla por sí misma (monitores, cofre luminoso) pero no
+    // ilumina el resto de la escena: no se agrega ninguna luz por esto.
+    let mut color = albedo * AMBIENT_STRENGTH + material.emission;
 
     for light in &scene.lights {
         let (light_dir, distance_to_light, radiance) = light.sample(hit.point);

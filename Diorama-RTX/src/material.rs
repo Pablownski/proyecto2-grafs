@@ -12,8 +12,6 @@ pub struct Material {
     pub transparency: f32,
     pub reflectivity: f32,
     pub refractive_index: f32,
-    // Se usa a partir de Fase 9 (monitores, cofre luminoso).
-    #[allow(dead_code)]
     pub emission: Color,
 }
 
@@ -137,6 +135,36 @@ pub fn load_extra_materials(textures: &mut TextureManager) -> Vec<Material> {
             0.01,
             1.00,
             Color::BLACK,
+        ),
+    ]
+}
+
+/// Materiales emisivos para el interior (Fase 9): pantallas de monitor y el
+/// cofre/dispositivo luminoso. `emission` los hace brillar por sí mismos,
+/// pero no reemplaza una luz real que ilumine el resto de la escena.
+pub fn load_glow_materials(textures: &mut TextureManager) -> Vec<Material> {
+    vec![
+        Material::new(
+            "Pantalla",
+            textures.load("assets/textures/screen.png"),
+            Color::new(0.15, 0.20, 0.22),
+            0.20,
+            16.0,
+            0.0,
+            0.10,
+            1.0,
+            Color::new(0.15, 0.85, 0.95),
+        ),
+        Material::new(
+            "Cofre luminoso",
+            textures.load("assets/textures/brushed_metal.png"),
+            Color::new(0.35, 0.30, 0.15),
+            0.60,
+            96.0,
+            0.0,
+            0.30,
+            1.0,
+            Color::new(1.0, 0.75, 0.20),
         ),
     ]
 }

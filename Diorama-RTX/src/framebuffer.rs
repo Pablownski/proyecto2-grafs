@@ -19,6 +19,9 @@ impl Framebuffer {
         self.pixels.fill(color);
     }
 
+    // Ya no la usa el render paralelo (escribe directo con as_mut_slice), pero
+    // se conserva por su chequeo de límites, cubierto por tests.
+    #[allow(dead_code)]
     pub fn set_pixel(&mut self, x: usize, y: usize, color: u32) {
         if x < self.width && y < self.height {
             self.pixels[y * self.width + x] = color;
@@ -27,6 +30,10 @@ impl Framebuffer {
 
     pub fn as_slice(&self) -> &[u32] {
         &self.pixels
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u32] {
+        &mut self.pixels
     }
 }
 

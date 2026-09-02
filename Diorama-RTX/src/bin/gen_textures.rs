@@ -126,6 +126,39 @@ fn water() -> RgbImage {
     img
 }
 
+/// Pantalla de monitor: bisel oscuro alrededor de una cuadrícula cian
+/// brillante, para usarse con un material emisivo (Fase 9).
+fn screen() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    let bezel = 10;
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            if x < bezel || x >= SIZE - bezel || y < bezel || y >= SIZE - bezel {
+                img.put_pixel(x, y, Rgb([12, 12, 14]));
+                continue;
+            }
+            let gx = (x - bezel) % 24;
+            let gy = (y - bezel) % 24;
+            let (r, g, b) = if gx < 1 || gy < 1 {
+                (30.0, 220.0, 235.0)
+            } else {
+                (8.0, 40.0, 46.0)
+            };
+            let noise = (hash_noise(x, y, 149) - 0.5) * 10.0;
+            img.put_pixel(
+                x,
+                y,
+                Rgb([
+                    (r + noise).clamp(0.0, 255.0) as u8,
+                    (g + noise).clamp(0.0, 255.0) as u8,
+                    (b + noise).clamp(0.0, 255.0) as u8,
+                ]),
+            );
+        }
+    }
+    img
+}
+
 // Paleta compartida del skybox: el horizonte de los cuatro muros coincide con
 // el borde exterior de las caras top/bottom, así que no hay costuras visibles
 // aunque cada cara se genere de forma independiente.
@@ -234,7 +267,7 @@ fn main() {
     let dir = "assets/textures";
     std::fs::create_dir_all(dir).expect("failed to create assets/textures");
 
-    let textures: [(&str, Generator); 7] = [
+    let textures: [(&str, Generator); 8] = [
         ("agency_stone.png", agency_stone),
         ("black_marble.png", black_marble),
         ("wood_panel.png", wood_panel),
@@ -242,6 +275,7 @@ fn main() {
         ("brushed_metal.png", brushed_metal),
         ("grass.png", grass),
         ("water.png", water),
+        ("screen.png", screen),
     ];
 
     for (name, generator) in textures {
