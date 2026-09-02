@@ -1,4 +1,5 @@
 mod app;
+mod camera;
 mod color;
 mod config;
 mod cube;
