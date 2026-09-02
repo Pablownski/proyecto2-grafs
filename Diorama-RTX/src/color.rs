@@ -1,6 +1,3 @@
-// Se usa completamente a partir de Fase 2 (shading) y Fase 4 (materiales).
-#![allow(dead_code)]
-
 use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -11,6 +8,8 @@ pub struct Color {
 }
 
 impl Color {
+    // Se usa a partir de Fase 5 (ambiente/sombras) y Fase 6-7 (mezcla y skybox).
+    #[allow(dead_code)]
     pub const BLACK: Color = Color {
         r: 0.0,
         g: 0.0,
@@ -27,10 +26,14 @@ impl Color {
     }
 
     /// Multiplicación componente a componente (no confundir con `Mul<f32>`, que escala).
+    /// Se usa a partir de Fase 5, al combinar luz y albedo.
+    #[allow(dead_code)]
     pub fn mul_color(self, other: Color) -> Color {
         Color::new(self.r * other.r, self.g * other.g, self.b * other.b)
     }
 
+    // Se usa a partir de Fase 7 (mezcla de caras del skybox).
+    #[allow(dead_code)]
     pub fn lerp(self, other: Color, t: f32) -> Color {
         self + (other - self) * t
     }
@@ -44,6 +47,8 @@ impl Color {
     }
 
     /// Corrección gamma simple (gamma = 2.2 típico) antes de convertir a u32.
+    /// Se usa a partir de Fase 14 (pulido final de la imagen).
+    #[allow(dead_code)]
     pub fn gamma_corrected(self, gamma: f32) -> Color {
         let inv_gamma = 1.0 / gamma;
         Color::new(

@@ -13,12 +13,12 @@ impl Framebuffer {
         }
     }
 
+    // Se usa a partir de Fase 13 (redibujo parcial en calidad adaptativa).
+    #[allow(dead_code)]
     pub fn clear(&mut self, color: u32) {
         self.pixels.fill(color);
     }
 
-    // Used starting Fase 2, when the renderer writes per-pixel results.
-    #[allow(dead_code)]
     pub fn set_pixel(&mut self, x: usize, y: usize, color: u32) {
         if x < self.width && y < self.height {
             self.pixels[y * self.width + x] = color;

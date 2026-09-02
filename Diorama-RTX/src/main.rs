@@ -1,8 +1,12 @@
 mod app;
 mod color;
 mod config;
+mod cube;
 mod framebuffer;
+mod hit;
 mod ray;
+mod renderer;
+mod scene;
 
 use app::App;
 

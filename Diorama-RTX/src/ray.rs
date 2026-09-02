@@ -1,6 +1,3 @@
-// Se usa completamente a partir de Fase 2 (generación de rayos e intersecciones).
-#![allow(dead_code)]
-
 use nalgebra_glm::Vec3;
 
 pub struct Ray {
