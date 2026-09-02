@@ -1,21 +1,21 @@
-use crate::color::Color;
 use crate::cube::Cube;
 use crate::hit::HitRecord;
+use crate::material::Material;
 use crate::ray::Ray;
+use crate::texture::TextureManager;
 
-/// Escena mínima para la Fase 2: cubos con color plano por `material_id`.
-/// A partir de la Fase 4 `flat_colors` se reemplaza por la lista real de
-/// `Material` con textura y parámetros ópticos.
 pub struct Scene {
     pub cubes: Vec<Cube>,
-    pub flat_colors: Vec<Color>,
+    pub materials: Vec<Material>,
+    pub textures: TextureManager,
 }
 
 impl Scene {
     pub fn new() -> Self {
         Self {
             cubes: Vec::new(),
-            flat_colors: Vec::new(),
+            materials: Vec::new(),
+            textures: TextureManager::new(),
         }
     }
 

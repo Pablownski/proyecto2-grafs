@@ -52,14 +52,24 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
         for x in 0..framebuffer.width {
             let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
             let color = match scene.closest_hit(&ray, EPSILON, f32::INFINITY) {
-                Some(hit) => scene
-                    .flat_colors
-                    .get(hit.material_id)
-                    .copied()
-                    .unwrap_or(Color::WHITE),
+                Some(hit) => shade_flat(scene, &hit),
                 None => background,
             };
             framebuffer.set_pixel(x, y, color.to_u32());
         }
+    }
+}
+
+/// Sombreado plano (sin iluminación todavía, ver Fase 5): textura del
+/// material modulada por su albedo, para verificar que cada material se
+/// muestrea correctamente por cara.
+fn shade_flat(scene: &Scene, hit: &crate::hit::HitRecord) -> Color {
+    match scene.materials.get(hit.material_id) {
+        Some(material) => {
+            let texture = scene.textures.get(material.texture_id);
+            let tex_color = texture.sample(hit.uv.x, hit.uv.y);
+            material.albedo.mul_color(tex_color)
+        }
+        None => Color::WHITE,
     }
 }

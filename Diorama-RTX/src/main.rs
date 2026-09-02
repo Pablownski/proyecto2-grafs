@@ -5,9 +5,11 @@ mod config;
 mod cube;
 mod framebuffer;
 mod hit;
+mod material;
 mod ray;
 mod renderer;
 mod scene;
+mod texture;
 
 use app::App;
 
