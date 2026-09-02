@@ -247,6 +247,28 @@ fn build_portico_columns(scene: &mut Scene) {
     add_columns(scene, &bases, 4.0, 0.8, MARBLE);
 }
 
+/// Podio macizo que rellena el hueco entre la isla (`ISLAND_TOP`) y el nivel
+/// de entrada (`ENTRANCE_TOP`) bajo todo el edificio, las columnas y el atrio.
+/// Sin esto solo la escalinata sostiene al edificio y se ve flotando.
+fn build_podium(scene: &mut Scene) {
+    // Debe empezar justo donde termina el último escalón (z=16.4, ver
+    // `build_plaza_and_stairs`): si se solapa con la escalinata, el bloque
+    // macizo bloquea la colisión del jugador aunque los escalones se vean
+    // encima (el jugador choca contra la masa de piedra antes de llegar
+    // al peldaño real).
+    let podium_start_z = 16.4;
+    let podium_end_z = 37.0;
+    let height = ENTRANCE_TOP - ISLAND_TOP;
+    let size_z = podium_end_z - podium_start_z;
+    let center_z = (podium_start_z + podium_end_z) * 0.5;
+    add_box(
+        scene,
+        vec3(0.0, ISLAND_TOP + height * 0.5, center_z),
+        vec3(60.0, height, size_z),
+        STONE,
+    );
+}
+
 // Volumen central: en vez de un bloque sólido, es una cáscara hueca (el
 // atrio, ver `build_atrium`) con macizos sólidos a los costados y un bloque
 // sólido superior, para conservar la silueta exterior de 28x18x12.
@@ -331,7 +353,10 @@ fn add_wall_with_doorway(
     material: usize,
 ) {
     let height = ceiling_y - floor_y;
-    let left_width = (door_half_width) - min_x;
+    // El vano de la puerta va de -door_half_width a +door_half_width; el
+    // segmento izquierdo debe terminar ahí, no en +door_half_width (eso
+    // dejaba la pared sólida, sin hueco real para entrar).
+    let left_width = -door_half_width - min_x;
     let left_center_x = min_x + left_width * 0.5;
     add_box(
         scene,
@@ -490,15 +515,23 @@ fn build_atrium(scene: &mut Scene) {
         WOOD,
     );
 
-    // Luz artificial fría del atrio.
+    // Luz artificial fría del atrio. El mármol del piso es muy especular
+    // (specular=0.85): con una luz cercana demasiado intensa el brillo se
+    // satura por completo y el ruido de la textura queda visible en el
+    // clamp (efecto "estática"), así que se mantiene moderada.
     scene.lights.push(Light::Point {
         position: vec3(
             0.0,
             ATRIUM_CEILING_Y - 1.0,
             (ATRIUM_FRONT_Z + ATRIUM_BACK_Z) * 0.5,
         ),
-        color: Color::new(0.65, 0.80, 1.0),
-        intensity: 45.0,
+        color: Color::new(0.70, 0.85, 1.0),
+        intensity: 55.0,
+    });
+    scene.lights.push(Light::Point {
+        position: vec3(0.0, ATRIUM_CEILING_Y - 1.0, ATRIUM_FRONT_Z + 2.5),
+        color: Color::new(0.75, 0.85, 1.0),
+        intensity: 22.0,
     });
 }
 
@@ -637,7 +670,14 @@ fn build_office(scene: &mut Scene) {
 fn build_windows(scene: &mut Scene) {
     let facade_z = 17.0 - 0.1;
     let window_size = vec3(1.2, 2.0, 0.3);
-    for floor in 0..4 {
+
+    // Planta baja: la ventana central de una fila de 7 caería justo en el
+    // vano de la puerta (x en [-2, 2]) y lo taparía con vidrio. Se omite esa
+    // ventana dividiendo la fila en dos tramos, izquierdo y derecho.
+    add_window_row(scene, vec3(-9.6, 2.5, facade_z), 3, 3.2, window_size, GLASS);
+    add_window_row(scene, vec3(3.2, 2.5, facade_z), 3, 3.2, window_size, GLASS);
+
+    for floor in 1..4 {
         let y = 2.5 + floor as f32 * 3.2;
         add_window_row(scene, vec3(-9.6, y, facade_z), 7, 3.2, window_size, GLASS);
     }
@@ -743,6 +783,7 @@ pub fn build(scene: &mut Scene) {
     build_dock(scene);
     build_plaza_and_stairs(scene);
     build_portico_columns(scene);
+    build_podium(scene);
     build_main_volume(scene);
     build_atrium(scene);
     build_office(scene);
@@ -752,4 +793,8 @@ pub fn build(scene: &mut Scene) {
     build_lights(scene);
 
     scene.skybox = Some(Skybox::load(&mut scene.textures, "assets/skybox"));
+
+    // Toda la geometría estática ya está en `scene.cubes`: construir el BVH
+    // una sola vez (Fase 13). Las piezas del jugador siguen fuera de él.
+    scene.rebuild_static_bvh();
 }

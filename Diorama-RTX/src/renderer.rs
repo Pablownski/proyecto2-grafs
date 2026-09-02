@@ -1,7 +1,7 @@
 use nalgebra_glm::{Vec3, cross, normalize};
 
 use crate::color::Color;
-use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_TRACE_DEPTH};
+use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_RENDER_THREADS};
 use crate::framebuffer::Framebuffer;
 use crate::hit::HitRecord;
 use crate::material::Material;
@@ -47,16 +47,51 @@ fn primary_ray(params: &RenderParams, x: usize, y: usize, width: usize, height: 
     Ray::new(params.eye, direction)
 }
 
-pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffer) {
-    for y in 0..framebuffer.height {
-        for x in 0..framebuffer.width {
-            let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
-            // Solo el rayo primario ve la vista previa de construcción: no
-            // debe proyectar sombras ni aparecer en reflejos/refracciones.
-            let color = trace(scene, &ray, MAX_TRACE_DEPTH, true);
-            framebuffer.set_pixel(x, y, color.to_u32());
+/// Traza toda la imagen, repartiendo franjas horizontales entre varios hilos
+/// con `std::thread::scope` (sección 13.4 del plan; nunca `rayon`). Con un
+/// solo hilo disponible se reduce naturalmente a la misma versión secuencial.
+/// `max_depth` permite bajar la profundidad en el modo interactivo (Fase 13)
+/// sin duplicar la lógica de trazado.
+pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffer, max_depth: u32) {
+    let width = framebuffer.width;
+    let height = framebuffer.height;
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, MAX_RENDER_THREADS)
+        .min(height.max(1));
+    let rows_per_thread = height.div_ceil(threads);
+
+    std::thread::scope(|scope| {
+        for (chunk_index, chunk) in framebuffer
+            .as_mut_slice()
+            .chunks_mut(rows_per_thread * width)
+            .enumerate()
+        {
+            let start_row = chunk_index * rows_per_thread;
+            scope.spawn(move || {
+                for (offset, pixel) in chunk.iter_mut().enumerate() {
+                    let y = start_row + offset / width;
+                    let x = offset % width;
+                    let ray = primary_ray(params, x, y, width, height);
+                    // Solo el rayo primario ve la vista previa de
+                    // construcción: no debe proyectar sombras ni aparecer en
+                    // reflejos/refracciones.
+                    *pixel = tonemap_reinhard(trace(scene, &ray, max_depth, true)).to_u32();
+                }
+            });
         }
-    }
+    });
+}
+
+/// Comprime el rango dinámico antes de convertir a `u32`. Sin esto, cualquier
+/// canal que sume más de 1.0 (luces cercanas, superficies muy especulares
+/// como el mármol, múltiples rebotes) se recorta a blanco puro de golpe, y
+/// zonas enteras (paredes, techos) se vuelven indistinguibles del cielo.
+/// `c / (1 + c)` comprime suavemente los valores altos sin tocar casi nada
+/// los tonos oscuros.
+fn tonemap_reinhard(c: Color) -> Color {
+    Color::new(c.r / (1.0 + c.r), c.g / (1.0 + c.g), c.b / (1.0 + c.b))
 }
 
 /// Color del cielo cuando un rayo no golpea geometría: el cubemap del skybox
@@ -239,6 +274,32 @@ fn schlick(cosine: f32, eta: f32) -> f32 {
 mod tests {
     use super::*;
     use nalgebra_glm::vec3;
+
+    #[test]
+    fn tonemap_reinhard_keeps_low_values_almost_unchanged() {
+        let c = tonemap_reinhard(Color::new(0.1, 0.2, 0.3));
+        assert!((c.r - 0.1 / 1.1).abs() < 1e-6);
+        assert!((c.g - 0.2 / 1.2).abs() < 1e-6);
+        assert!((c.b - 0.3 / 1.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tonemap_reinhard_compresses_high_values_below_one() {
+        let c = tonemap_reinhard(Color::new(5.0, 20.0, 100.0));
+        assert!(c.r < 1.0 && c.r > 0.5);
+        assert!(c.g < 1.0 && c.g > 0.9);
+        assert!(c.b < 1.0 && c.b > 0.9);
+    }
+
+    #[test]
+    fn tonemap_reinhard_preserves_relative_ordering_of_bright_values() {
+        // Dos superficies muy brillantes distintas no deben volverse
+        // indistinguibles (blanco puro) tras comprimir el rango.
+        let dim = tonemap_reinhard(Color::new(3.0, 3.0, 3.0));
+        let bright = tonemap_reinhard(Color::new(30.0, 30.0, 30.0));
+        assert!(bright.r > dim.r);
+        assert!(dim.r < 1.0);
+    }
 
     #[test]
     fn reflect_perpendicular_incidence_bounces_straight_back() {

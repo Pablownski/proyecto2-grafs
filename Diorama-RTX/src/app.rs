@@ -8,9 +8,11 @@ use crate::building::{self, BuildState, PieceKind};
 use crate::camera::OrbitCamera;
 use crate::collision;
 use crate::config::{
-    FB_HEIGHT, FB_WIDTH, JUMP_SPEED, MAX_DT, ORBIT_PITCH_SPEED, ORBIT_SCROLL_ZOOM_FACTOR,
-    ORBIT_YAW_SPEED, ORBIT_ZOOM_SPEED, PLAYER_FOV_DEGREES, PLAYER_LOOK_PITCH_SPEED,
-    PLAYER_LOOK_YAW_SPEED, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED, WINDOW_SCALE, WINDOW_TITLE,
+    FB_HEIGHT, FB_WIDTH, IDLE_REFINE_DELAY, INTERACTIVE_FB_HEIGHT, INTERACTIVE_FB_WIDTH,
+    INTERACTIVE_TRACE_DEPTH, JUMP_SPEED, MAX_DT, MAX_TRACE_DEPTH, ORBIT_PITCH_SPEED,
+    ORBIT_SCROLL_ZOOM_FACTOR, ORBIT_YAW_SPEED, ORBIT_ZOOM_SPEED, PLAYER_FOV_DEGREES,
+    PLAYER_LOOK_PITCH_SPEED, PLAYER_LOOK_YAW_SPEED, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED,
+    WINDOW_SCALE, WINDOW_TITLE,
 };
 use crate::framebuffer::Framebuffer;
 use crate::player::Player;
@@ -25,7 +27,15 @@ enum CameraMode {
 
 pub struct App {
     window: Window,
+    /// Framebuffer de calidad completa (`FB_WIDTH`x`FB_HEIGHT`, `MAX_TRACE_DEPTH`).
     framebuffer: Framebuffer,
+    /// Framebuffer reducido para cuando la cámara está en movimiento (Fase 13).
+    interactive_framebuffer: Framebuffer,
+    /// Cuál de los dos framebuffers es el más reciente y debe mostrarse.
+    showing_interactive: bool,
+    /// Hubo un cambio reciente que todavía no se refinó a calidad completa.
+    needs_quality_refine: bool,
+    last_change_at: Instant,
     scene: Scene,
     camera_mode: CameraMode,
     orbit_camera: OrbitCamera,
@@ -33,8 +43,70 @@ pub struct App {
     build_state: BuildState,
     left_mouse_was_down: bool,
     right_mouse_was_down: bool,
-    render_params: RenderParams,
-    aspect: f32,
+    stats: RenderStats,
+}
+
+/// Medición simple de tiempos (sección 13: "medir tiempos primero"). Junta
+/// cuadros interactivos y de calidad en una ventana de ~1s y los imprime por
+/// consola, para poder comparar antes/después de optimizar.
+struct RenderStats {
+    window_start: Instant,
+    interactive_frames: u32,
+    interactive_total_secs: f32,
+    quality_frames: u32,
+    quality_total_secs: f32,
+}
+
+impl RenderStats {
+    fn new() -> Self {
+        Self {
+            window_start: Instant::now(),
+            interactive_frames: 0,
+            interactive_total_secs: 0.0,
+            quality_frames: 0,
+            quality_total_secs: 0.0,
+        }
+    }
+
+    fn record_interactive(&mut self, elapsed_secs: f32) {
+        self.interactive_frames += 1;
+        self.interactive_total_secs += elapsed_secs;
+    }
+
+    fn record_quality(&mut self, elapsed_secs: f32) {
+        self.quality_frames += 1;
+        self.quality_total_secs += elapsed_secs;
+    }
+
+    /// Imprime y reinicia la ventana si ya pasó ~1 segundo y hubo actividad.
+    fn maybe_report(&mut self, now: Instant) {
+        let window_secs = now.duration_since(self.window_start).as_secs_f32();
+        if window_secs < 1.0 {
+            return;
+        }
+        if self.interactive_frames > 0 || self.quality_frames > 0 {
+            let fps = self.interactive_frames as f32 / window_secs;
+            let avg_interactive_ms = if self.interactive_frames > 0 {
+                self.interactive_total_secs / self.interactive_frames as f32 * 1000.0
+            } else {
+                0.0
+            };
+            let avg_quality_ms = if self.quality_frames > 0 {
+                self.quality_total_secs / self.quality_frames as f32 * 1000.0
+            } else {
+                0.0
+            };
+            println!(
+                "[render] interactivo: {} cuadros ({:.1} fps, {:.1} ms/cuadro) | calidad: {} cuadros ({:.1} ms/cuadro)",
+                self.interactive_frames,
+                fps,
+                avg_interactive_ms,
+                self.quality_frames,
+                avg_quality_ms
+            );
+        }
+        *self = Self::new();
+    }
 }
 
 impl App {
@@ -48,21 +120,24 @@ impl App {
         .expect("failed to create window");
 
         let framebuffer = Framebuffer::new(FB_WIDTH, FB_HEIGHT);
+        let interactive_framebuffer = Framebuffer::new(INTERACTIVE_FB_WIDTH, INTERACTIVE_FB_HEIGHT);
         let mut scene = Scene::new();
         agency::build(&mut scene);
 
-        let aspect = FB_WIDTH as f32 / FB_HEIGHT as f32;
         let orbit_camera =
             OrbitCamera::new(vec3(0.0, 6.0, 12.0), 0.15, 0.35, 55.0, 55f32.to_radians());
         // Nace en la plaza, mirando hacia la entrada del edificio (+Z).
         let player = Player::new(vec3(0.0, -1.2, -3.0), 0.0);
-        let render_params = orbit_camera.render_params(aspect);
 
         print_controls_help();
 
-        Self {
+        let mut app = Self {
             window,
             framebuffer,
+            interactive_framebuffer,
+            showing_interactive: false,
+            needs_quality_refine: false,
+            last_change_at: Instant::now(),
             scene,
             camera_mode: CameraMode::Orbit,
             orbit_camera,
@@ -70,14 +145,25 @@ impl App {
             build_state: BuildState::new(STONE),
             left_mouse_was_down: false,
             right_mouse_was_down: false,
-            render_params,
-            aspect,
+            stats: RenderStats::new(),
+        };
+
+        let params = app.current_render_params(FB_WIDTH, FB_HEIGHT);
+        renderer::render(&app.scene, &params, &mut app.framebuffer, MAX_TRACE_DEPTH);
+        app
+    }
+
+    fn current_render_params(&self, width: usize, height: usize) -> RenderParams {
+        let aspect = width as f32 / height as f32;
+        match self.camera_mode {
+            CameraMode::Orbit => self.orbit_camera.render_params(aspect),
+            CameraMode::FirstPerson => self
+                .player
+                .render_params(PLAYER_FOV_DEGREES.to_radians(), aspect),
         }
     }
 
     pub fn run(&mut self) {
-        renderer::render(&self.scene, &self.render_params, &mut self.framebuffer);
-
         let mut last_frame = Instant::now();
 
         while self.window.is_open() && !self.window.is_key_down(Key::Escape) {
@@ -107,22 +193,54 @@ impl App {
                 changed = true;
             }
 
+            // Calidad adaptativa (sección 13.2): mientras algo cambia se
+            // renderiza a resolución/profundidad reducidas; al quedar
+            // quieto un instante corto se refina a calidad completa una
+            // sola vez. Si nada cambió y ya está refinado, no se vuelve a
+            // trazar: se reutiliza el framebuffer ya calculado.
             if changed {
-                self.render_params = match self.camera_mode {
-                    CameraMode::Orbit => self.orbit_camera.render_params(self.aspect),
-                    CameraMode::FirstPerson => self
-                        .player
-                        .render_params(PLAYER_FOV_DEGREES.to_radians(), self.aspect),
-                };
-                renderer::render(&self.scene, &self.render_params, &mut self.framebuffer);
+                self.last_change_at = now;
+                self.needs_quality_refine = true;
+                let params =
+                    self.current_render_params(INTERACTIVE_FB_WIDTH, INTERACTIVE_FB_HEIGHT);
+                let render_start = Instant::now();
+                renderer::render(
+                    &self.scene,
+                    &params,
+                    &mut self.interactive_framebuffer,
+                    INTERACTIVE_TRACE_DEPTH,
+                );
+                self.stats
+                    .record_interactive(render_start.elapsed().as_secs_f32());
+                self.showing_interactive = true;
+            } else if self.needs_quality_refine
+                && now.duration_since(self.last_change_at).as_secs_f32() >= IDLE_REFINE_DELAY
+            {
+                let params = self.current_render_params(FB_WIDTH, FB_HEIGHT);
+                let render_start = Instant::now();
+                renderer::render(&self.scene, &params, &mut self.framebuffer, MAX_TRACE_DEPTH);
+                self.stats
+                    .record_quality(render_start.elapsed().as_secs_f32());
+                self.showing_interactive = false;
+                self.needs_quality_refine = false;
             }
+            self.stats.maybe_report(now);
 
-            self.window
-                .update_with_buffer(
+            let (buffer, width, height) = if self.showing_interactive {
+                (
+                    self.interactive_framebuffer.as_slice(),
+                    self.interactive_framebuffer.width,
+                    self.interactive_framebuffer.height,
+                )
+            } else {
+                (
                     self.framebuffer.as_slice(),
                     self.framebuffer.width,
                     self.framebuffer.height,
                 )
+            };
+            self.window
+                .update_with_buffer(buffer, width, height)
                 .expect("failed to update window buffer");
         }
     }

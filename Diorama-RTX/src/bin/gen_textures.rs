@@ -41,8 +41,8 @@ fn black_marble() -> RgbImage {
         for x in 0..SIZE {
             let fx = x as f32;
             let fy = y as f32;
-            let streak = ((fx * 0.15 + fy * 0.35).sin() * 0.5 + 0.5) * 0.25;
-            let noise = (hash_noise(x, y, 23) - 0.5) * 0.04;
+            let streak = ((fx * 0.15 + fy * 0.35).sin() * 0.5 + 0.5) * 0.10;
+            let noise = (hash_noise(x, y, 23) - 0.5) * 0.015;
             let base = 0.10;
             let v = base + streak + noise;
             img.put_pixel(

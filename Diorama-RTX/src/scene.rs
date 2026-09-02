@@ -1,3 +1,4 @@
+use crate::acceleration::Bvh;
 use crate::cube::Cube;
 use crate::hit::HitRecord;
 use crate::light::Light;
@@ -17,6 +18,9 @@ pub struct Scene {
     pub textures: TextureManager,
     pub lights: Vec<Light>,
     pub skybox: Option<Skybox>,
+    /// BVH sobre `cubes` (Fase 13). Solo válido mientras `cubes` no cambie;
+    /// se reconstruye con `rebuild_static_bvh`. `None` usa búsqueda lineal.
+    bvh: Option<Bvh>,
 }
 
 impl Scene {
@@ -29,34 +33,65 @@ impl Scene {
             textures: TextureManager::new(),
             lights: Vec::new(),
             skybox: None,
+            bvh: None,
         }
     }
 
-    /// Impacto más cercano contra `cubes` + `dynamic_cubes`, en `[t_min, t_max]`.
-    /// Independiente del orden: cada impacto encontrado reduce el límite
-    /// superior de búsqueda. Se usa para sombras, reflejos, refracción y
+    /// Construye (o reconstruye) el BVH sobre `cubes`. Debe llamarse después
+    /// de terminar de poblar la geometría estática y antes de renderizar;
+    /// `dynamic_cubes` y `preview_cubes` no entran al BVH y no lo invalidan.
+    pub fn rebuild_static_bvh(&mut self) {
+        self.bvh = if self.cubes.is_empty() {
+            None
+        } else {
+            Some(Bvh::build(&self.cubes))
+        };
+    }
+
+    /// Impacto más cercano contra `cubes` (vía BVH si existe) + `dynamic_cubes`
+    /// (búsqueda lineal). Se usa para sombras, reflejos, refracción y
     /// colisiones: la vista previa nunca debe afectarlas.
     pub fn closest_hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        Self::closest_hit_in(
-            self.cubes.iter().chain(self.dynamic_cubes.iter()),
-            ray,
-            t_min,
-            t_max,
-        )
+        self.closest_hit_impl(ray, t_min, t_max, false)
     }
 
     /// Igual que `closest_hit`, pero también contra `preview_cubes`. Solo
     /// debe usarse para el rayo primario de la cámara.
     pub fn closest_hit_with_preview(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        Self::closest_hit_in(
-            self.cubes
-                .iter()
-                .chain(self.dynamic_cubes.iter())
-                .chain(self.preview_cubes.iter()),
-            ray,
-            t_min,
-            t_max,
-        )
+        self.closest_hit_impl(ray, t_min, t_max, true)
+    }
+
+    fn closest_hit_impl(
+        &self,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+        include_preview: bool,
+    ) -> Option<HitRecord> {
+        let mut closest = t_max;
+        let mut result = None;
+
+        let static_hit = match &self.bvh {
+            Some(bvh) => bvh.closest_hit(&self.cubes, ray, t_min, closest),
+            None => Self::closest_hit_in(self.cubes.iter(), ray, t_min, closest),
+        };
+        if let Some(hit) = static_hit {
+            closest = hit.t;
+            result = Some(hit);
+        }
+
+        if let Some(hit) = Self::closest_hit_in(self.dynamic_cubes.iter(), ray, t_min, closest) {
+            closest = hit.t;
+            result = Some(hit);
+        }
+
+        if include_preview
+            && let Some(hit) = Self::closest_hit_in(self.preview_cubes.iter(), ray, t_min, closest)
+        {
+            result = Some(hit);
+        }
+
+        result
     }
 
     fn closest_hit_in<'a>(
@@ -142,6 +177,28 @@ mod tests {
             .closest_hit_with_preview(&ray, 0.001, f32::INFINITY)
             .unwrap();
         assert_eq!(hit.material_id, 9);
+    }
+
+    #[test]
+    fn rebuild_static_bvh_matches_linear_search_result() {
+        let mut scene = Scene::new();
+        for i in 0..40 {
+            let x = i as f32 * 2.0;
+            scene.cubes.push(Cube::new(
+                vec3(x - 0.5, -0.5, -0.5),
+                vec3(x + 0.5, 0.5, 0.5),
+                i,
+            ));
+        }
+        let ray = Ray::new(vec3(20.0, 0.0, -10.0), vec3(0.0, 0.0, 1.0));
+
+        let without_bvh = scene.closest_hit(&ray, 0.001, f32::INFINITY).unwrap();
+
+        scene.rebuild_static_bvh();
+        let with_bvh = scene.closest_hit(&ray, 0.001, f32::INFINITY).unwrap();
+
+        assert_eq!(without_bvh.material_id, with_bvh.material_id);
+        assert!((without_bvh.t - with_bvh.t).abs() < 1e-4);
     }
 
     // Pequeño helper de prueba: `Cube` no deriva `Clone` en el diseño final

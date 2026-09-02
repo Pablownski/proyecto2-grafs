@@ -40,3 +40,14 @@ pub const JUMP_SPEED: f32 = 7.5;
 pub const STEP_HEIGHT: f32 = 0.55;
 /// Pequeño margen para no quedar exactamente al ras de una superficie.
 pub const COLLISION_MARGIN: f32 = 0.01;
+
+// Optimización y calidad adaptativa (Fase 13). Mientras la cámara se mueve
+// se renderiza a esta resolución y profundidad reducidas; al quedarse
+// quieta un instante corto se refina a `FB_WIDTH`/`FB_HEIGHT`/`MAX_TRACE_DEPTH`.
+pub const INTERACTIVE_FB_WIDTH: usize = FB_WIDTH / 2;
+pub const INTERACTIVE_FB_HEIGHT: usize = FB_HEIGHT / 2;
+pub const INTERACTIVE_TRACE_DEPTH: u32 = 2;
+/// Tiempo de quietud antes de volver a renderizar con calidad completa.
+pub const IDLE_REFINE_DELAY: f32 = 0.25;
+/// Límite de hilos que reparte `std::thread::scope` por franjas horizontales.
+pub const MAX_RENDER_THREADS: usize = 8;
