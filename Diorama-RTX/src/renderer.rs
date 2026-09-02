@@ -1,8 +1,9 @@
 use nalgebra_glm::{Vec3, cross, normalize};
 
 use crate::color::Color;
-use crate::config::EPSILON;
+use crate::config::{AMBIENT_STRENGTH, EPSILON};
 use crate::framebuffer::Framebuffer;
+use crate::hit::HitRecord;
 use crate::ray::Ray;
 use crate::scene::Scene;
 
@@ -52,7 +53,7 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
         for x in 0..framebuffer.width {
             let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
             let color = match scene.closest_hit(&ray, EPSILON, f32::INFINITY) {
-                Some(hit) => shade_flat(scene, &hit),
+                Some(hit) => shade(scene, &hit, -ray.direction),
                 None => background,
             };
             framebuffer.set_pixel(x, y, color.to_u32());
@@ -60,16 +61,51 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
     }
 }
 
-/// Sombreado plano (sin iluminación todavía, ver Fase 5): textura del
-/// material modulada por su albedo, para verificar que cada material se
-/// muestrea correctamente por cara.
-fn shade_flat(scene: &Scene, hit: &crate::hit::HitRecord) -> Color {
-    match scene.materials.get(hit.material_id) {
-        Some(material) => {
-            let texture = scene.textures.get(material.texture_id);
-            let tex_color = texture.sample(hit.uv.x, hit.uv.y);
-            material.albedo.mul_color(tex_color)
+/// Iluminación local: ambiente + difusa Lambert + especular Blinn-Phong por
+/// cada luz, con rayos de sombra. Todavía sin reflexión ni refracción
+/// recursivas (Fase 6).
+fn shade(scene: &Scene, hit: &HitRecord, view_dir: Vec3) -> Color {
+    let material = match scene.materials.get(hit.material_id) {
+        Some(material) => material,
+        None => return Color::WHITE,
+    };
+    let texture = scene.textures.get(material.texture_id);
+    let tex_color = texture.sample(hit.uv.x, hit.uv.y);
+    let albedo = material.albedo.mul_color(tex_color);
+
+    let mut color = albedo * AMBIENT_STRENGTH;
+
+    for light in &scene.lights {
+        let (light_dir, distance_to_light, radiance) = light.sample(hit.point);
+        let n_dot_l = hit.normal.dot(&light_dir).max(0.0);
+        if n_dot_l <= 0.0 {
+            continue;
         }
-        None => Color::WHITE,
+
+        // Rayo de sombra: bloqueado solo si el obstáculo está antes de la luz.
+        let shadow_origin = hit.point + hit.normal * EPSILON;
+        let shadow_ray = Ray::new(shadow_origin, light_dir);
+        let shadow_t_max = if distance_to_light.is_finite() {
+            distance_to_light - EPSILON
+        } else {
+            f32::INFINITY
+        };
+        if scene
+            .closest_hit(&shadow_ray, EPSILON, shadow_t_max)
+            .is_some()
+        {
+            continue;
+        }
+
+        let diffuse = albedo.mul_color(radiance) * (material.diffuse_weight() * n_dot_l);
+
+        let half_vector = normalize(&(light_dir + view_dir));
+        let n_dot_h = hit.normal.dot(&half_vector).max(0.0);
+        let spec_strength = n_dot_h.powf(material.shininess);
+        let specular = radiance * (material.specular * spec_strength);
+
+        color = color + diffuse + specular;
     }
+
+    color.clamp()
 }

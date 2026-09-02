@@ -2,14 +2,11 @@ use nalgebra_glm::{Vec2, Vec3};
 
 pub struct HitRecord {
     pub t: f32,
-    // Se usan a partir de Fase 5 (sombras, iluminación) y Fase 4 (muestreo de textura).
-    #[allow(dead_code)]
     pub point: Vec3,
-    #[allow(dead_code)]
     pub normal: Vec3,
-    #[allow(dead_code)]
     pub uv: Vec2,
     pub material_id: usize,
+    // Se usa a partir de Fase 6 (elegir la relación eta_i/eta_t en refracción).
     #[allow(dead_code)]
     pub front_face: bool,
 }

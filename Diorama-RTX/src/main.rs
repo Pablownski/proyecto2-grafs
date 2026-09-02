@@ -5,6 +5,7 @@ mod config;
 mod cube;
 mod framebuffer;
 mod hit;
+mod light;
 mod material;
 mod ray;
 mod renderer;

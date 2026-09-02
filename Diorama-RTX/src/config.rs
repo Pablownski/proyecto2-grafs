@@ -15,3 +15,6 @@ pub const ORBIT_SCROLL_ZOOM_FACTOR: f32 = 0.6; // unidades por "notch" de rueda
 
 /// Límite superior de `dt` para evitar saltos grandes tras pausar la ventana.
 pub const MAX_DT: f32 = 0.1;
+
+/// Luz ambiental mínima (Fase 5), para evitar negro absoluto en zonas sin luz directa.
+pub const AMBIENT_STRENGTH: f32 = 0.06;

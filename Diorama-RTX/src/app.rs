@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use minifb::{Key, Window, WindowOptions};
-use nalgebra_glm::{vec2, vec3};
+use nalgebra_glm::{normalize, vec2, vec3};
 
 use crate::camera::OrbitCamera;
 use crate::color::Color;
@@ -11,6 +11,7 @@ use crate::config::{
 };
 use crate::cube::Cube;
 use crate::framebuffer::Framebuffer;
+use crate::light::Light;
 use crate::material::{Material, load_core_materials};
 use crate::renderer::{self, RenderParams};
 use crate::scene::Scene;
@@ -163,6 +164,19 @@ fn build_demo_scene() -> Scene {
     scene.cubes.push(glass_cube);
     scene.cubes.push(metal);
     scene.cubes.push(floor);
+
+    // Sol cálido direccional + luz puntual fría, para ver sombras, volumen y
+    // el specular distinto entre metal y piedra.
+    scene.lights.push(Light::Directional {
+        direction: normalize(&vec3(-0.35, -0.85, -0.4)),
+        color: Color::new(1.0, 0.95, 0.85),
+        intensity: 1.0,
+    });
+    scene.lights.push(Light::Point {
+        position: vec3(1.4, 3.5, 3.0),
+        color: Color::new(0.55, 0.75, 1.0),
+        intensity: 6.0,
+    });
 
     scene
 }

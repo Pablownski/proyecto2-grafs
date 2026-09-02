@@ -1,5 +1,6 @@
 use crate::cube::Cube;
 use crate::hit::HitRecord;
+use crate::light::Light;
 use crate::material::Material;
 use crate::ray::Ray;
 use crate::texture::TextureManager;
@@ -8,6 +9,7 @@ pub struct Scene {
     pub cubes: Vec<Cube>,
     pub materials: Vec<Material>,
     pub textures: TextureManager,
+    pub lights: Vec<Light>,
 }
 
 impl Scene {
@@ -16,6 +18,7 @@ impl Scene {
             cubes: Vec::new(),
             materials: Vec::new(),
             textures: TextureManager::new(),
+            lights: Vec::new(),
         }
     }
 

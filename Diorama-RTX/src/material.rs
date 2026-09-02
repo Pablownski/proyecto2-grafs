@@ -2,22 +2,21 @@ use crate::color::Color;
 use crate::texture::TextureManager;
 
 pub struct Material {
-    // Se usan a partir de Fase 5 (specular, shininess), Fase 6 (transparency,
-    // reflectivity, refractive_index) y Fase 9 (emission, monitores/cofre).
+    // Se usa a partir de Fase 9 (nombres visibles en depuración/README).
     #[allow(dead_code)]
     pub name: String,
     pub texture_id: usize,
     pub albedo: Color,
-    #[allow(dead_code)]
     pub specular: f32,
-    #[allow(dead_code)]
     pub shininess: f32,
+    // Se usan a partir de Fase 6 (reflexión y refracción recursivas).
     #[allow(dead_code)]
     pub transparency: f32,
     #[allow(dead_code)]
     pub reflectivity: f32,
     #[allow(dead_code)]
     pub refractive_index: f32,
+    // Se usa a partir de Fase 9 (monitores, cofre luminoso).
     #[allow(dead_code)]
     pub emission: Color,
 }
@@ -48,8 +47,7 @@ impl Material {
         }
     }
 
-    /// Peso de la contribución difusa, nunca negativo. Se usa a partir de Fase 5.
-    #[allow(dead_code)]
+    /// Peso de la contribución difusa, nunca negativo.
     pub fn diffuse_weight(&self) -> f32 {
         (1.0 - self.reflectivity - self.transparency).max(0.0)
     }
