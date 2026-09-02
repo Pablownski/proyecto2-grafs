@@ -6,8 +6,6 @@ pub struct HitRecord {
     pub normal: Vec3,
     pub uv: Vec2,
     pub material_id: usize,
-    // Se usa a partir de Fase 6 (elegir la relación eta_i/eta_t en refracción).
-    #[allow(dead_code)]
     pub front_face: bool,
 }
 

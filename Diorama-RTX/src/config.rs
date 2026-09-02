@@ -18,3 +18,7 @@ pub const MAX_DT: f32 = 0.1;
 
 /// Luz ambiental mínima (Fase 5), para evitar negro absoluto en zonas sin luz directa.
 pub const AMBIENT_STRENGTH: f32 = 0.06;
+
+/// Límite de rebotes recursivos de reflexión/refracción (Fase 6). Modo de
+/// calidad; el modo interactivo reducido llega en la Fase 13.
+pub const MAX_TRACE_DEPTH: u32 = 4;

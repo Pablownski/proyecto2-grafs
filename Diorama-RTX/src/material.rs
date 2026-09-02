@@ -9,12 +9,8 @@ pub struct Material {
     pub albedo: Color,
     pub specular: f32,
     pub shininess: f32,
-    // Se usan a partir de Fase 6 (reflexión y refracción recursivas).
-    #[allow(dead_code)]
     pub transparency: f32,
-    #[allow(dead_code)]
     pub reflectivity: f32,
-    #[allow(dead_code)]
     pub refractive_index: f32,
     // Se usa a partir de Fase 9 (monitores, cofre luminoso).
     #[allow(dead_code)]
