@@ -1,6 +1,8 @@
 mod app;
+mod color;
 mod config;
 mod framebuffer;
+mod ray;
 
 use app::App;
 
