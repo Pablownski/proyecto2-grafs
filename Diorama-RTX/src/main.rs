@@ -1,5 +1,6 @@
 mod agency;
 mod app;
+mod building;
 mod camera;
 mod collision;
 mod color;

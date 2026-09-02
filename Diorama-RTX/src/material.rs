@@ -169,6 +169,36 @@ pub fn load_glow_materials(textures: &mut TextureManager) -> Vec<Material> {
     ]
 }
 
+/// Materiales de vista previa para el sistema de construcción (Fase 12):
+/// translúcidos (reutilizan la textura de vidrio) para no ocultar del todo
+/// la geometría detrás; verde si la colocación es válida, rojo si no.
+pub fn load_preview_materials(textures: &mut TextureManager) -> Vec<Material> {
+    vec![
+        Material::new(
+            "Vista previa válida",
+            textures.load("assets/textures/glass.png"),
+            Color::new(0.25, 0.95, 0.35),
+            0.3,
+            32.0,
+            0.55,
+            0.05,
+            1.0,
+            Color::new(0.05, 0.35, 0.10),
+        ),
+        Material::new(
+            "Vista previa inválida",
+            textures.load("assets/textures/glass.png"),
+            Color::new(0.95, 0.20, 0.20),
+            0.3,
+            32.0,
+            0.55,
+            0.05,
+            1.0,
+            Color::new(0.35, 0.05, 0.05),
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

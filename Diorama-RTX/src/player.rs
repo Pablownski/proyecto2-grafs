@@ -67,12 +67,12 @@ impl Player {
         }
     }
 
-    fn eye_position(&self) -> Vec3 {
+    pub(crate) fn eye_position(&self) -> Vec3 {
         self.position + vec3(0.0, PLAYER_EYE_HEIGHT, 0.0)
     }
 
     /// Dirección de la mirada en 3D (incluye pitch), siempre unitaria.
-    fn look_direction(&self) -> Vec3 {
+    pub(crate) fn look_direction(&self) -> Vec3 {
         vec3(
             self.yaw.sin() * self.pitch.cos(),
             self.pitch.sin(),

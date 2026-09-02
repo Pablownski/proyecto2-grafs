@@ -4,7 +4,7 @@ use crate::config::{COLLISION_MARGIN, GRAVITY, PLAYER_HEIGHT, PLAYER_RADIUS, STE
 use crate::player::Player;
 use crate::scene::Scene;
 
-fn player_aabb(position: Vec3) -> (Vec3, Vec3) {
+pub(crate) fn player_aabb(position: Vec3) -> (Vec3, Vec3) {
     let min = vec3(
         position.x - PLAYER_RADIUS,
         position.y,
@@ -18,7 +18,7 @@ fn player_aabb(position: Vec3) -> (Vec3, Vec3) {
     (min, max)
 }
 
-fn overlaps(a_min: Vec3, a_max: Vec3, b_min: Vec3, b_max: Vec3) -> bool {
+pub(crate) fn overlaps(a_min: Vec3, a_max: Vec3, b_min: Vec3, b_max: Vec3) -> bool {
     a_min.x < b_max.x
         && a_max.x > b_min.x
         && a_min.y < b_max.y
@@ -40,7 +40,7 @@ fn move_axis(scene: &Scene, position: &mut Vec3, axis: usize, delta: f32) -> boo
     let (mut min, mut max) = player_aabb(*position);
     let mut collided = false;
 
-    for cube in &scene.cubes {
+    for cube in scene.cubes.iter().chain(scene.dynamic_cubes.iter()) {
         if !cube.collidable {
             continue;
         }
@@ -100,6 +100,7 @@ fn standing_on_something(scene: &Scene, position: Vec3) -> bool {
     scene
         .cubes
         .iter()
+        .chain(scene.dynamic_cubes.iter())
         .any(|cube| cube.collidable && overlaps(probe_min, probe_max, cube.min, cube.max))
 }
 
@@ -175,6 +176,24 @@ mod tests {
 
         // El muro empieza en x=1.9; con radio 0.30 el jugador no debería
         // pasar de x ~= 1.9 - 0.30.
+        assert!(player.position.x < 1.9 - PLAYER_RADIUS + 0.05);
+    }
+
+    #[test]
+    fn player_collides_with_dynamic_cubes_too() {
+        let mut scene = scene_with_floor();
+        // Una pieza colocada por el jugador (Fase 12), no geometría estática.
+        scene
+            .dynamic_cubes
+            .push(Cube::new(vec3(1.9, 0.0, -10.0), vec3(2.5, 3.0, 10.0), 0));
+
+        let mut player = Player::new(vec3(0.0, 0.0, 0.0), 0.0);
+        player.grounded = true;
+
+        for _ in 0..120 {
+            move_player(&scene, &mut player, vec3(0.3, 0.0, 0.0), 1.0 / 60.0);
+        }
+
         assert!(player.position.x < 1.9 - PLAYER_RADIUS + 0.05);
     }
 

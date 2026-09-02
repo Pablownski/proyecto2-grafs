@@ -1,9 +1,10 @@
 use std::time::Instant;
 
-use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
 use nalgebra_glm::{Vec3, vec3};
 
-use crate::agency;
+use crate::agency::{self, METAL, PREVIEW_INVALID, PREVIEW_VALID, STONE, WOOD};
+use crate::building::{self, BuildState, PieceKind};
 use crate::camera::OrbitCamera;
 use crate::collision;
 use crate::config::{
@@ -29,6 +30,9 @@ pub struct App {
     camera_mode: CameraMode,
     orbit_camera: OrbitCamera,
     player: Player,
+    build_state: BuildState,
+    left_mouse_was_down: bool,
+    right_mouse_was_down: bool,
     render_params: RenderParams,
     aspect: f32,
 }
@@ -63,6 +67,9 @@ impl App {
             camera_mode: CameraMode::Orbit,
             orbit_camera,
             player,
+            build_state: BuildState::new(STONE),
+            left_mouse_was_down: false,
+            right_mouse_was_down: false,
             render_params,
             aspect,
         }
@@ -88,10 +95,17 @@ impl App {
                 print_controls_help();
             }
 
-            let changed = match self.camera_mode {
+            let mut changed = match self.camera_mode {
                 CameraMode::Orbit => self.handle_orbit_input(dt),
                 CameraMode::FirstPerson => self.handle_first_person_input(dt),
             };
+
+            if self.camera_mode == CameraMode::FirstPerson {
+                changed |= self.handle_build_input();
+            } else if !self.scene.preview_cubes.is_empty() {
+                self.scene.preview_cubes.clear();
+                changed = true;
+            }
 
             if changed {
                 self.render_params = match self.camera_mode {
@@ -213,6 +227,104 @@ impl App {
 
         moved || delta_yaw != 0.0 || delta_pitch != 0.0
     }
+
+    /// Sistema de construcción (Fase 12): `B` activa/desactiva, `1/2/3`
+    /// eligen pieza, `R` rota 90°, `Z/X/C` eligen material, clic
+    /// izquierdo/`Enter` coloca, clic derecho/`Delete` elimina.
+    fn handle_build_input(&mut self) -> bool {
+        let mut changed = false;
+
+        if self.window.is_key_pressed(Key::B, KeyRepeat::No) {
+            self.build_state.enabled = !self.build_state.enabled;
+            if !self.build_state.enabled {
+                self.scene.preview_cubes.clear();
+            }
+            changed = true;
+        }
+
+        if !self.build_state.enabled {
+            return changed;
+        }
+
+        // Estas selecciones no necesitan marcar `changed` por separado: la
+        // vista previa se recalcula y se vuelve a renderizar de todas formas
+        // mientras la construcción está activa (ver `changed = true` abajo).
+        if self.window.is_key_pressed(Key::Key1, KeyRepeat::No) {
+            self.build_state.kind = PieceKind::Wall;
+        }
+        if self.window.is_key_pressed(Key::Key2, KeyRepeat::No) {
+            self.build_state.kind = PieceKind::Floor;
+        }
+        if self.window.is_key_pressed(Key::Key3, KeyRepeat::No) {
+            self.build_state.kind = PieceKind::Ramp;
+        }
+        if self.window.is_key_pressed(Key::R, KeyRepeat::No) {
+            self.build_state.rotate();
+        }
+        if self.window.is_key_pressed(Key::Z, KeyRepeat::No) {
+            self.build_state.material = WOOD;
+        }
+        if self.window.is_key_pressed(Key::X, KeyRepeat::No) {
+            self.build_state.material = STONE;
+        }
+        if self.window.is_key_pressed(Key::C, KeyRepeat::No) {
+            self.build_state.material = METAL;
+        }
+
+        let preview = building::compute_preview(&self.scene, &self.player, &self.build_state);
+        self.scene.preview_cubes.clear();
+        if let Some(preview) = &preview {
+            // Vuelve a pintar cada cubo con el material fantasma (verde/rojo)
+            // en vez del material elegido, para no duplicar la geometría.
+            let tint = if preview.valid {
+                PREVIEW_VALID
+            } else {
+                PREVIEW_INVALID
+            };
+            for cube in &preview.cubes {
+                let mut ghost = crate::cube::Cube::new(cube.min, cube.max, tint);
+                ghost.uv_scale = cube.uv_scale;
+                self.scene.preview_cubes.push(ghost);
+            }
+        }
+        changed = true;
+
+        let left_down = self.window.get_mouse_down(MouseButton::Left);
+        let place_pressed = (left_down && !self.left_mouse_was_down)
+            || self.window.is_key_pressed(Key::Enter, KeyRepeat::No);
+        self.left_mouse_was_down = left_down;
+
+        if place_pressed
+            && let Some(preview) = &preview
+            && preview.valid
+        {
+            self.scene
+                .dynamic_cubes
+                .extend(preview.cubes.iter().map(clone_cube));
+            changed = true;
+        }
+
+        let right_down = self.window.get_mouse_down(MouseButton::Right);
+        let delete_pressed = (right_down && !self.right_mouse_was_down)
+            || self.window.is_key_pressed(Key::Delete, KeyRepeat::No);
+        self.right_mouse_was_down = right_down;
+
+        if delete_pressed
+            && let Some(index) = building::find_targeted_piece(&self.scene, &self.player)
+        {
+            self.scene.dynamic_cubes.remove(index);
+            changed = true;
+        }
+
+        changed
+    }
+}
+
+fn clone_cube(cube: &crate::cube::Cube) -> crate::cube::Cube {
+    let mut copy = crate::cube::Cube::new(cube.min, cube.max, cube.material_id);
+    copy.uv_scale = cube.uv_scale;
+    copy.build_piece = cube.build_piece;
+    copy
 }
 
 fn print_controls_help() {
@@ -220,6 +332,10 @@ fn print_controls_help() {
     println!("Tab: cambiar camara orbital / primera persona");
     println!("Orbital -> Flechas: orbitar | Q/E o rueda: acercar/alejar");
     println!("Primera persona -> WASD: moverse | Flechas: mirar | Shift: correr | Espacio: saltar");
+    println!("Construccion -> B: activar/desactivar | 1/2/3: pared/piso/rampa | R: rotar");
+    println!(
+        "  Z/X/C: madera/piedra/metal | Click izq o Enter: colocar | Click der o Delete: eliminar"
+    );
     println!("F1: mostrar esta ayuda | Escape: salir");
 }
 

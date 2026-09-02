@@ -51,7 +51,9 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
     for y in 0..framebuffer.height {
         for x in 0..framebuffer.width {
             let ray = primary_ray(params, x, y, framebuffer.width, framebuffer.height);
-            let color = trace(scene, &ray, MAX_TRACE_DEPTH);
+            // Solo el rayo primario ve la vista previa de construcción: no
+            // debe proyectar sombras ni aparecer en reflejos/refracciones.
+            let color = trace(scene, &ray, MAX_TRACE_DEPTH, true);
             framebuffer.set_pixel(x, y, color.to_u32());
         }
     }
@@ -69,9 +71,15 @@ fn background_color(scene: &Scene, direction: Vec3) -> Color {
 /// Traza un rayo primario o secundario: impacto más cercano -> sombreado
 /// local + reflexión/refracción recursivas hasta `depth == 0`. El skybox
 /// también se ve en rayos secundarios (reflejos, refracción), porque todos
-/// pasan por esta misma función.
-fn trace(scene: &Scene, ray: &Ray, depth: u32) -> Color {
-    match scene.closest_hit(ray, EPSILON, f32::INFINITY) {
+/// pasan por esta misma función. `include_preview` solo debe ser `true` para
+/// el rayo primario de cámara (ver `render`).
+fn trace(scene: &Scene, ray: &Ray, depth: u32, include_preview: bool) -> Color {
+    let hit = if include_preview {
+        scene.closest_hit_with_preview(ray, EPSILON, f32::INFINITY)
+    } else {
+        scene.closest_hit(ray, EPSILON, f32::INFINITY)
+    };
+    match hit {
         Some(hit) => shade(scene, &hit, ray, depth),
         None => background_color(scene, ray.direction),
     }
@@ -136,7 +144,12 @@ fn shade(scene: &Scene, hit: &HitRecord, ray: &Ray, depth: u32) -> Color {
     if material.reflectivity > 0.0 {
         let reflect_dir = reflect(ray.direction, hit.normal);
         let reflect_origin = hit.point + hit.normal * EPSILON;
-        let reflect_color = trace(scene, &Ray::new(reflect_origin, reflect_dir), depth - 1);
+        let reflect_color = trace(
+            scene,
+            &Ray::new(reflect_origin, reflect_dir),
+            depth - 1,
+            false,
+        );
         color = color + reflect_color * material.reflectivity;
     }
 
@@ -169,14 +182,29 @@ fn refractive_contribution(
             let kr = schlick(cos_i, eta);
             let refract_origin = hit.point - hit.normal * EPSILON;
 
-            let reflect_color = trace(scene, &Ray::new(reflect_origin, reflect_dir), depth - 1);
-            let refract_color = trace(scene, &Ray::new(refract_origin, refract_dir), depth - 1);
+            let reflect_color = trace(
+                scene,
+                &Ray::new(reflect_origin, reflect_dir),
+                depth - 1,
+                false,
+            );
+            let refract_color = trace(
+                scene,
+                &Ray::new(refract_origin, refract_dir),
+                depth - 1,
+                false,
+            );
 
             (reflect_color * kr + refract_color * (1.0 - kr)) * material.transparency
         }
         // Reflexión interna total: no hay rayo refractado, todo se refleja.
         None => {
-            trace(scene, &Ray::new(reflect_origin, reflect_dir), depth - 1) * material.transparency
+            trace(
+                scene,
+                &Ray::new(reflect_origin, reflect_dir),
+                depth - 1,
+                false,
+            ) * material.transparency
         }
     }
 }

@@ -7,21 +7,25 @@ use nalgebra_glm::{Vec2, Vec3, normalize, vec2, vec3};
 use crate::color::Color;
 use crate::cube::Cube;
 use crate::light::Light;
-use crate::material::{load_core_materials, load_extra_materials, load_glow_materials};
+use crate::material::{
+    load_core_materials, load_extra_materials, load_glow_materials, load_preview_materials,
+};
 use crate::scene::Scene;
 use crate::skybox::Skybox;
 
 // Índices de material tras cargar `load_core_materials` + `load_extra_materials`
 // + `load_glow_materials`.
-const STONE: usize = 0;
+pub(crate) const STONE: usize = 0;
 const MARBLE: usize = 1;
-const WOOD: usize = 2;
+pub(crate) const WOOD: usize = 2;
 const GLASS: usize = 3;
-const METAL: usize = 4;
+pub(crate) const METAL: usize = 4;
 const WATER: usize = 5;
 const GRASS: usize = 6;
 const SCREEN: usize = 7;
 const CHEST: usize = 8;
+pub(crate) const PREVIEW_VALID: usize = 9;
+pub(crate) const PREVIEW_INVALID: usize = 10;
 
 // Niveles del terreno (ver sección 5.2: +Y arriba, plano XZ horizontal).
 const WATER_TOP: f32 = -2.0;
@@ -246,9 +250,9 @@ fn build_portico_columns(scene: &mut Scene) {
 // Volumen central: en vez de un bloque sólido, es una cáscara hueca (el
 // atrio, ver `build_atrium`) con macizos sólidos a los costados y un bloque
 // sólido superior, para conservar la silueta exterior de 28x18x12.
-const ATRIUM_MIN_X: f32 = -7.0;
-const ATRIUM_MAX_X: f32 = 7.0;
-const ATRIUM_FRONT_Z: f32 = 17.0;
+pub(crate) const ATRIUM_MIN_X: f32 = -7.0;
+pub(crate) const ATRIUM_MAX_X: f32 = 7.0;
+pub(crate) const ATRIUM_FRONT_Z: f32 = 17.0;
 const ATRIUM_BACK_Z: f32 = 27.0;
 const ATRIUM_FLOOR_Y: f32 = ENTRANCE_TOP;
 const ATRIUM_CEILING_Y: f32 = ENTRANCE_TOP + 10.0;
@@ -502,7 +506,7 @@ fn build_atrium(scene: &mut Scene) {
 const OFFICE_MIN_X: f32 = -4.0;
 const OFFICE_MAX_X: f32 = 4.0;
 const OFFICE_FRONT_Z: f32 = ATRIUM_BACK_Z + 2.0; // deja el corredor de la puerta.
-const OFFICE_BACK_Z: f32 = OFFICE_FRONT_Z + 7.0;
+pub(crate) const OFFICE_BACK_Z: f32 = OFFICE_FRONT_Z + 7.0;
 const OFFICE_FLOOR_Y: f32 = ENTRANCE_TOP;
 const OFFICE_CEILING_Y: f32 = ENTRANCE_TOP + 4.0;
 
@@ -731,6 +735,9 @@ pub fn build(scene: &mut Scene) {
     scene
         .materials
         .extend(load_glow_materials(&mut scene.textures));
+    scene
+        .materials
+        .extend(load_preview_materials(&mut scene.textures));
 
     build_water_and_island(scene);
     build_dock(scene);

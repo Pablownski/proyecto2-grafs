@@ -8,6 +8,11 @@ use crate::texture::TextureManager;
 
 pub struct Scene {
     pub cubes: Vec<Cube>,
+    /// Piezas colocadas por el jugador con el sistema de construcción (Fase 12).
+    pub dynamic_cubes: Vec<Cube>,
+    /// Vista previa de construcción del frame actual (no participa en
+    /// sombras ni colisiones, solo en el rayo primario de la cámara).
+    pub preview_cubes: Vec<Cube>,
     pub materials: Vec<Material>,
     pub textures: TextureManager,
     pub lights: Vec<Light>,
@@ -18,6 +23,8 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             cubes: Vec::new(),
+            dynamic_cubes: Vec::new(),
+            preview_cubes: Vec::new(),
             materials: Vec::new(),
             textures: TextureManager::new(),
             lights: Vec::new(),
@@ -25,12 +32,42 @@ impl Scene {
         }
     }
 
-    /// Impacto más cercano en `[t_min, t_max]`. Independiente del orden de
-    /// `cubes`: cada impacto encontrado reduce el límite superior de búsqueda.
+    /// Impacto más cercano contra `cubes` + `dynamic_cubes`, en `[t_min, t_max]`.
+    /// Independiente del orden: cada impacto encontrado reduce el límite
+    /// superior de búsqueda. Se usa para sombras, reflejos, refracción y
+    /// colisiones: la vista previa nunca debe afectarlas.
     pub fn closest_hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        Self::closest_hit_in(
+            self.cubes.iter().chain(self.dynamic_cubes.iter()),
+            ray,
+            t_min,
+            t_max,
+        )
+    }
+
+    /// Igual que `closest_hit`, pero también contra `preview_cubes`. Solo
+    /// debe usarse para el rayo primario de la cámara.
+    pub fn closest_hit_with_preview(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        Self::closest_hit_in(
+            self.cubes
+                .iter()
+                .chain(self.dynamic_cubes.iter())
+                .chain(self.preview_cubes.iter()),
+            ray,
+            t_min,
+            t_max,
+        )
+    }
+
+    fn closest_hit_in<'a>(
+        cubes: impl Iterator<Item = &'a Cube>,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+    ) -> Option<HitRecord> {
         let mut closest = t_max;
         let mut result = None;
-        for cube in &self.cubes {
+        for cube in cubes {
             if let Some(hit) = cube.hit(ray, t_min, closest) {
                 closest = hit.t;
                 result = Some(hit);
@@ -79,6 +116,32 @@ mod tests {
         let scene = Scene::new();
         let ray = Ray::new(vec3(0.0, 0.0, -5.0), vec3(0.0, 0.0, 1.0));
         assert!(scene.closest_hit(&ray, 0.001, f32::INFINITY).is_none());
+    }
+
+    #[test]
+    fn closest_hit_includes_dynamic_cubes() {
+        let mut scene = Scene::new();
+        scene
+            .dynamic_cubes
+            .push(Cube::new(vec3(-0.5, -0.5, 1.0), vec3(0.5, 0.5, 2.0), 7));
+        let ray = Ray::new(vec3(0.0, 0.0, -5.0), vec3(0.0, 0.0, 1.0));
+        let hit = scene.closest_hit(&ray, 0.001, f32::INFINITY).unwrap();
+        assert_eq!(hit.material_id, 7);
+    }
+
+    #[test]
+    fn closest_hit_excludes_preview_cubes_but_with_preview_includes_them() {
+        let mut scene = Scene::new();
+        scene
+            .preview_cubes
+            .push(Cube::new(vec3(-0.5, -0.5, 1.0), vec3(0.5, 0.5, 2.0), 9));
+        let ray = Ray::new(vec3(0.0, 0.0, -5.0), vec3(0.0, 0.0, 1.0));
+
+        assert!(scene.closest_hit(&ray, 0.001, f32::INFINITY).is_none());
+        let hit = scene
+            .closest_hit_with_preview(&ray, 0.001, f32::INFINITY)
+            .unwrap();
+        assert_eq!(hit.material_id, 9);
     }
 
     // Pequeño helper de prueba: `Cube` no deriva `Clone` en el diseño final
