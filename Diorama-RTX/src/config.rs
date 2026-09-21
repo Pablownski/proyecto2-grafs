@@ -1,6 +1,10 @@
-pub const FB_WIDTH: usize = 400;
-pub const FB_HEIGHT: usize = 225;
-pub const WINDOW_SCALE: usize = 2;
+/// Resolución de "calidad" (Fase 13): se usa cuando la cámara está quieta,
+/// que es cuando realmente se mira/captura la escena, así que vale la pena
+/// que sea nítida. `WINDOW_SCALE=1` la muestra a resolución nativa (sin
+/// estirar) gracias al margen de rendimiento que dan el BVH y el multihilo.
+pub const FB_WIDTH: usize = 800;
+pub const FB_HEIGHT: usize = 450;
+pub const WINDOW_SCALE: usize = 1;
 
 pub const WINDOW_TITLE: &str = "The Agency Raytracing Diorama";
 
@@ -44,8 +48,10 @@ pub const COLLISION_MARGIN: f32 = 0.01;
 // Optimización y calidad adaptativa (Fase 13). Mientras la cámara se mueve
 // se renderiza a esta resolución y profundidad reducidas; al quedarse
 // quieta un instante corto se refina a `FB_WIDTH`/`FB_HEIGHT`/`MAX_TRACE_DEPTH`.
-pub const INTERACTIVE_FB_WIDTH: usize = FB_WIDTH / 2;
-pub const INTERACTIVE_FB_HEIGHT: usize = FB_HEIGHT / 2;
+// Fija (no depende de `FB_WIDTH`/`FB_HEIGHT`) para que subir la resolución de
+// calidad no vuelva pesado el modo interactivo.
+pub const INTERACTIVE_FB_WIDTH: usize = 200;
+pub const INTERACTIVE_FB_HEIGHT: usize = 112;
 pub const INTERACTIVE_TRACE_DEPTH: u32 = 2;
 /// Tiempo de quietud antes de volver a renderizar con calidad completa.
 pub const IDLE_REFINE_DELAY: f32 = 0.25;
