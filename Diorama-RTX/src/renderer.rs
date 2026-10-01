@@ -1,7 +1,9 @@
 use nalgebra_glm::{Vec3, cross, normalize};
 
 use crate::color::Color;
-use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_RENDER_THREADS};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use crate::config::{AMBIENT_STRENGTH, EPSILON, MAX_RENDER_THREADS, MIN_RAY_WEIGHT};
 use crate::framebuffer::Framebuffer;
 use crate::hit::HitRecord;
 use crate::material::Material;
@@ -60,24 +62,35 @@ pub fn render(scene: &Scene, params: &RenderParams, framebuffer: &mut Framebuffe
         .unwrap_or(1)
         .clamp(1, MAX_RENDER_THREADS)
         .min(height.max(1));
-    let rows_per_thread = height.div_ceil(threads);
+
+    // Reparto dinámico por filas: cada hilo toma la siguiente fila libre.
+    // Con franjas fijas, el hilo al que le tocaba el agua o el atrio (mucho
+    // más caros por los rebotes) terminaba último y los demás esperaban.
+    let rows: Vec<std::sync::Mutex<&mut [u32]>> = framebuffer
+        .as_mut_slice()
+        .chunks_mut(width)
+        .map(std::sync::Mutex::new)
+        .collect();
+    let next_row = AtomicUsize::new(0);
 
     std::thread::scope(|scope| {
-        for (chunk_index, chunk) in framebuffer
-            .as_mut_slice()
-            .chunks_mut(rows_per_thread * width)
-            .enumerate()
-        {
-            let start_row = chunk_index * rows_per_thread;
-            scope.spawn(move || {
-                for (offset, pixel) in chunk.iter_mut().enumerate() {
-                    let y = start_row + offset / width;
-                    let x = offset % width;
-                    let ray = primary_ray(params, x, y, width, height);
-                    // Solo el rayo primario ve la vista previa de
-                    // construcción: no debe proyectar sombras ni aparecer en
-                    // reflejos/refracciones.
-                    *pixel = tonemap_reinhard(trace(scene, &ray, max_depth, true)).to_u32();
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let y = next_row.fetch_add(1, Ordering::Relaxed);
+                    if y >= height {
+                        break;
+                    }
+                    // Cada fila la toma un solo hilo, así que el lock nunca compite.
+                    let mut row = rows[y].lock().unwrap();
+                    for (x, pixel) in row.iter_mut().enumerate() {
+                        let ray = primary_ray(params, x, y, width, height);
+                        // Solo el rayo primario ve la vista previa de
+                        // construcción: no debe proyectar sombras ni
+                        // aparecer en reflejos/refracciones.
+                        *pixel =
+                            tonemap_reinhard(trace(scene, &ray, max_depth, 1.0, true)).to_u32();
+                    }
                 }
             });
         }
@@ -107,22 +120,24 @@ fn background_color(scene: &Scene, direction: Vec3) -> Color {
 /// local + reflexión/refracción recursivas hasta `depth == 0`. El skybox
 /// también se ve en rayos secundarios (reflejos, refracción), porque todos
 /// pasan por esta misma función. `include_preview` solo debe ser `true` para
-/// el rayo primario de cámara (ver `render`).
-fn trace(scene: &Scene, ray: &Ray, depth: u32, include_preview: bool) -> Color {
+/// el rayo primario de cámara (ver `render`). `weight` es cuánto aporta este
+/// rayo al píxel final (1.0 para el primario, el producto de
+/// reflectividad/transparencia/Fresnel en los secundarios).
+fn trace(scene: &Scene, ray: &Ray, depth: u32, weight: f32, include_preview: bool) -> Color {
     let hit = if include_preview {
         scene.closest_hit_with_preview(ray, EPSILON, f32::INFINITY)
     } else {
         scene.closest_hit(ray, EPSILON, f32::INFINITY)
     };
     match hit {
-        Some(hit) => shade(scene, &hit, ray, depth),
+        Some(hit) => shade(scene, &hit, ray, depth, weight),
         None => background_color(scene, ray.direction),
     }
 }
 
 /// Iluminación local (ambiente + difusa Lambert + especular Blinn-Phong, con
 /// sombras) más las contribuciones recursivas de reflexión y refracción.
-fn shade(scene: &Scene, hit: &HitRecord, ray: &Ray, depth: u32) -> Color {
+fn shade(scene: &Scene, hit: &HitRecord, ray: &Ray, depth: u32, weight: f32) -> Color {
     let material = match scene.materials.get(hit.material_id) {
         Some(material) => material,
         None => return Color::WHITE,
@@ -173,16 +188,21 @@ fn shade(scene: &Scene, hit: &HitRecord, ray: &Ray, depth: u32) -> Color {
     }
 
     if material.transparency > 0.0 {
-        color = color + refractive_contribution(scene, hit, ray, material, depth);
+        color = color + refractive_contribution(scene, hit, ray, material, depth, weight);
     }
 
-    if material.reflectivity > 0.0 {
+    // Poda del árbol de rayos: un rebote que aportaría menos de
+    // `MIN_RAY_WEIGHT` al píxel final no se nota, pero cuesta lo mismo que
+    // uno visible (con sus propias sombras y rebotes).
+    let reflect_weight = weight * material.reflectivity;
+    if reflect_weight >= MIN_RAY_WEIGHT {
         let reflect_dir = reflect(ray.direction, hit.normal);
         let reflect_origin = hit.point + hit.normal * EPSILON;
         let reflect_color = trace(
             scene,
             &Ray::new(reflect_origin, reflect_dir),
             depth - 1,
+            reflect_weight,
             false,
         );
         color = color + reflect_color * material.reflectivity;
@@ -200,7 +220,9 @@ fn refractive_contribution(
     ray: &Ray,
     material: &Material,
     depth: u32,
+    weight: f32,
 ) -> Color {
+    let weight = weight * material.transparency;
     let (eta_i, eta_t) = if hit.front_face {
         (1.0, material.refractive_index)
     } else {
@@ -217,27 +239,43 @@ fn refractive_contribution(
             let kr = schlick(cos_i, eta);
             let refract_origin = hit.point - hit.normal * EPSILON;
 
-            let reflect_color = trace(
-                scene,
-                &Ray::new(reflect_origin, reflect_dir),
-                depth - 1,
-                false,
-            );
-            let refract_color = trace(
-                scene,
-                &Ray::new(refract_origin, refract_dir),
-                depth - 1,
-                false,
-            );
+            let reflect_weight = weight * kr;
+            let reflect_color = if reflect_weight >= MIN_RAY_WEIGHT {
+                trace(
+                    scene,
+                    &Ray::new(reflect_origin, reflect_dir),
+                    depth - 1,
+                    reflect_weight,
+                    false,
+                )
+            } else {
+                Color::BLACK
+            };
+            let refract_weight = weight * (1.0 - kr);
+            let refract_color = if refract_weight >= MIN_RAY_WEIGHT {
+                trace(
+                    scene,
+                    &Ray::new(refract_origin, refract_dir),
+                    depth - 1,
+                    refract_weight,
+                    false,
+                )
+            } else {
+                Color::BLACK
+            };
 
             (reflect_color * kr + refract_color * (1.0 - kr)) * material.transparency
         }
         // Reflexión interna total: no hay rayo refractado, todo se refleja.
         None => {
+            if weight < MIN_RAY_WEIGHT {
+                return Color::BLACK;
+            }
             trace(
                 scene,
                 &Ray::new(reflect_origin, reflect_dir),
                 depth - 1,
+                weight,
                 false,
             ) * material.transparency
         }

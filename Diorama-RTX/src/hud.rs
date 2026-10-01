@@ -63,6 +63,17 @@ pub fn draw_hint(buffer: &mut [u32], width: usize, height: usize, panel_open: bo
     draw_text(buffer, width, height, x + pad, y + pad, text, COLOR_TEXT);
 }
 
+/// Título de sección en la esquina superior izquierda (lo usa el video demo).
+pub fn draw_caption(buffer: &mut [u32], width: usize, height: usize, text: &str) {
+    let pad = 8;
+    let box_w = text_width(text) + pad * 2;
+    let box_h = GLYPH_H * TEXT_SCALE + pad * 2;
+    let (x, y) = (10, 10);
+    fill_rect_blend(buffer, width, height, x, y, box_w, box_h, COLOR_PANEL, 0.7);
+    fill_rect_blend(buffer, width, height, x, y, 4, box_h, COLOR_TITLE, 1.0);
+    draw_text(buffer, width, height, x + pad + 2, y + pad, text, COLOR_TITLE);
+}
+
 /// Panel centrado con la lista de teclas, como un "mapa" desplegable.
 pub fn draw_controls_panel(buffer: &mut [u32], width: usize, height: usize) {
     let pad = 16;

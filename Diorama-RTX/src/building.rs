@@ -3,7 +3,9 @@
 
 use nalgebra_glm::{Vec3, vec2, vec3};
 
-use crate::agency::{ATRIUM_FRONT_Z, ATRIUM_MAX_X, ATRIUM_MIN_X, OFFICE_BACK_Z};
+use crate::agency::{
+    ATRIUM_FRONT_Z, ATRIUM_MAX_X, ATRIUM_MIN_X, OFFICE_BACK_Z, PREVIEW_INVALID, PREVIEW_VALID,
+};
 use crate::collision::{overlaps, player_aabb};
 use crate::config::EPSILON;
 use crate::cube::Cube;
@@ -216,6 +218,45 @@ pub fn compute_preview(scene: &Scene, player: &Player, state: &BuildState) -> Op
     let cubes = piece_cubes(state.kind, base, state.rotation_deg, state.material);
     let valid = validate_placement(scene, player, &cubes);
     Some(Preview { cubes, valid })
+}
+
+/// Recalcula la vista previa y la pinta en `scene.preview_cubes` con el
+/// material fantasma (verde si es válida, rojo si no) en vez del material
+/// elegido, para no duplicar la geometría. Devuelve la vista previa.
+pub fn refresh_preview(scene: &mut Scene, player: &Player, state: &BuildState) -> Option<Preview> {
+    let preview = compute_preview(scene, player, state);
+    scene.preview_cubes.clear();
+    if let Some(preview) = &preview {
+        let tint = if preview.valid {
+            PREVIEW_VALID
+        } else {
+            PREVIEW_INVALID
+        };
+        for cube in &preview.cubes {
+            let mut ghost = Cube::new(cube.min, cube.max, tint);
+            ghost.uv_scale = cube.uv_scale;
+            scene.preview_cubes.push(ghost);
+        }
+    }
+    preview
+}
+
+/// Coloca la pieza de la vista previa si es válida. Devuelve si se colocó.
+pub fn place_preview(scene: &mut Scene, preview: &Preview) -> bool {
+    if !preview.valid {
+        return false;
+    }
+    scene
+        .dynamic_cubes
+        .extend(preview.cubes.iter().map(clone_cube));
+    true
+}
+
+fn clone_cube(cube: &Cube) -> Cube {
+    let mut copy = Cube::new(cube.min, cube.max, cube.material_id);
+    copy.uv_scale = cube.uv_scale;
+    copy.build_piece = cube.build_piece;
+    copy
 }
 
 #[cfg(test)]

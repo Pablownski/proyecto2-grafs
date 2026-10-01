@@ -3,7 +3,7 @@ use std::time::Instant;
 use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
 use nalgebra_glm::{Vec3, vec3};
 
-use crate::agency::{self, METAL, PREVIEW_INVALID, PREVIEW_VALID, STONE, WOOD};
+use crate::agency::{self, METAL, STONE, WOOD};
 use crate::audio::BackgroundMusic;
 use crate::building::{self, BuildState, PieceKind};
 use crate::camera::OrbitCamera;
@@ -257,24 +257,17 @@ impl App {
         }
     }
 
-    /// Copia el último render a `display` (escalando por vecino más cercano
-    /// si es el framebuffer interactivo) y dibuja el HUD encima. Solo se
-    /// llama cuando algo cambió, para no recomponer en cada cuadro quieto.
+    /// Copia el último render a `display` (agrandando con interpolación
+    /// bilineal si es el framebuffer interactivo) y dibuja el HUD encima.
+    /// Solo se llama cuando algo cambió, para no recomponer en cada cuadro
+    /// quieto.
     fn compose_display(&mut self) {
         let source = if self.showing_interactive {
             &self.interactive_framebuffer
         } else {
             &self.framebuffer
         };
-        let pixels = source.as_slice();
-        for y in 0..FB_HEIGHT {
-            let sy = y * source.height / FB_HEIGHT;
-            let src_row = &pixels[sy * source.width..(sy + 1) * source.width];
-            let dst_row = &mut self.display[y * FB_WIDTH..(y + 1) * FB_WIDTH];
-            for (x, dst) in dst_row.iter_mut().enumerate() {
-                *dst = src_row[x * source.width / FB_WIDTH];
-            }
-        }
+        source.resize_into(&mut self.display, FB_WIDTH, FB_HEIGHT);
 
         if self.show_controls {
             hud::draw_controls_panel(&mut self.display, FB_WIDTH, FB_HEIGHT);
@@ -432,22 +425,7 @@ impl App {
             self.build_state.material = METAL;
         }
 
-        let preview = building::compute_preview(&self.scene, &self.player, &self.build_state);
-        self.scene.preview_cubes.clear();
-        if let Some(preview) = &preview {
-            // Vuelve a pintar cada cubo con el material fantasma (verde/rojo)
-            // en vez del material elegido, para no duplicar la geometría.
-            let tint = if preview.valid {
-                PREVIEW_VALID
-            } else {
-                PREVIEW_INVALID
-            };
-            for cube in &preview.cubes {
-                let mut ghost = crate::cube::Cube::new(cube.min, cube.max, tint);
-                ghost.uv_scale = cube.uv_scale;
-                self.scene.preview_cubes.push(ghost);
-            }
-        }
+        let preview = building::refresh_preview(&mut self.scene, &self.player, &self.build_state);
         changed = true;
 
         let left_down = self.window.get_mouse_down(MouseButton::Left);
@@ -457,11 +435,8 @@ impl App {
 
         if place_pressed
             && let Some(preview) = &preview
-            && preview.valid
+            && building::place_preview(&mut self.scene, preview)
         {
-            self.scene
-                .dynamic_cubes
-                .extend(preview.cubes.iter().map(clone_cube));
             changed = true;
         }
 
@@ -479,13 +454,6 @@ impl App {
 
         changed
     }
-}
-
-fn clone_cube(cube: &crate::cube::Cube) -> crate::cube::Cube {
-    let mut copy = crate::cube::Cube::new(cube.min, cube.max, cube.material_id);
-    copy.uv_scale = cube.uv_scale;
-    copy.build_piece = cube.build_piece;
-    copy
 }
 
 fn print_controls_help() {

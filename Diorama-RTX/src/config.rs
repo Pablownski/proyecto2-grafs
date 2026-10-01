@@ -50,13 +50,16 @@ pub const COLLISION_MARGIN: f32 = 0.01;
 // quieta un instante corto se refina a `FB_WIDTH`/`FB_HEIGHT`/`MAX_TRACE_DEPTH`.
 // Fija (no depende de `FB_WIDTH`/`FB_HEIGHT`) para que subir la resolución de
 // calidad no vuelva pesado el modo interactivo.
-pub const INTERACTIVE_FB_WIDTH: usize = 300;
-pub const INTERACTIVE_FB_HEIGHT: usize = 169;
+pub const INTERACTIVE_FB_WIDTH: usize = 400;
+pub const INTERACTIVE_FB_HEIGHT: usize = 225;
 pub const INTERACTIVE_TRACE_DEPTH: u32 = 2;
 /// Tiempo de quietud antes de volver a renderizar con calidad completa.
 pub const IDLE_REFINE_DELAY: f32 = 0.25;
-/// Límite de hilos que reparte `std::thread::scope` por franjas horizontales.
-pub const MAX_RENDER_THREADS: usize = 8;
+/// Límite de hilos del render (se usan los núcleos disponibles hasta este tope).
+pub const MAX_RENDER_THREADS: usize = 32;
+/// Aporte mínimo (0..1) que debe tener un rayo secundario sobre el píxel
+/// final para trazarlo; por debajo de esto el rebote no se nota.
+pub const MIN_RAY_WEIGHT: f32 = 0.02;
 
 // Música de fondo (se reproduce en loop mientras la app esté abierta).
 pub const MUSIC_PATH: &str = "assets/music.mp3";
