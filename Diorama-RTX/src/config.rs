@@ -57,3 +57,7 @@ pub const INTERACTIVE_TRACE_DEPTH: u32 = 2;
 pub const IDLE_REFINE_DELAY: f32 = 0.25;
 /// Límite de hilos que reparte `std::thread::scope` por franjas horizontales.
 pub const MAX_RENDER_THREADS: usize = 8;
+
+// Música de fondo (se reproduce en loop mientras la app esté abierta).
+pub const MUSIC_PATH: &str = "assets/music.mp3";
+pub const MUSIC_VOLUME: f32 = 0.5;

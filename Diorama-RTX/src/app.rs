@@ -4,6 +4,7 @@ use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
 use nalgebra_glm::{Vec3, vec3};
 
 use crate::agency::{self, METAL, PREVIEW_INVALID, PREVIEW_VALID, STONE, WOOD};
+use crate::audio::BackgroundMusic;
 use crate::building::{self, BuildState, PieceKind};
 use crate::camera::OrbitCamera;
 use crate::collision;
@@ -12,7 +13,7 @@ use crate::config::{
     INTERACTIVE_TRACE_DEPTH, JUMP_SPEED, MAX_DT, MAX_TRACE_DEPTH, ORBIT_PITCH_SPEED,
     ORBIT_SCROLL_ZOOM_FACTOR, ORBIT_YAW_SPEED, ORBIT_ZOOM_SPEED, PLAYER_FOV_DEGREES,
     PLAYER_LOOK_PITCH_SPEED, PLAYER_LOOK_YAW_SPEED, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED,
-    WINDOW_SCALE, WINDOW_TITLE,
+    MUSIC_PATH, MUSIC_VOLUME, WINDOW_SCALE, WINDOW_TITLE,
 };
 use crate::framebuffer::Framebuffer;
 use crate::hud;
@@ -52,6 +53,8 @@ pub struct App {
     left_mouse_was_down: bool,
     right_mouse_was_down: bool,
     stats: RenderStats,
+    /// Se guarda solo para que la música siga sonando mientras viva la app.
+    _music: Option<BackgroundMusic>,
 }
 
 /// Medición simple de tiempos (sección 13: "medir tiempos primero"). Junta
@@ -157,6 +160,7 @@ impl App {
             left_mouse_was_down: false,
             right_mouse_was_down: false,
             stats: RenderStats::new(),
+            _music: BackgroundMusic::start(MUSIC_PATH, MUSIC_VOLUME),
         };
 
         let params = app.current_render_params(FB_WIDTH, FB_HEIGHT);

@@ -8,6 +8,7 @@ default-run = "Diorama-RTX"
 minifb = "0.26.0"
 nalgebra-glm = "0.18.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
+rodio = { version = "0.22", default-features = false, features = ["playback", "mp3"] }
 
 [profile.dev]
 opt-level = 3
