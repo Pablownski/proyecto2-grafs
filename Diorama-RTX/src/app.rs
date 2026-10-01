@@ -15,6 +15,7 @@ use crate::config::{
     WINDOW_SCALE, WINDOW_TITLE,
 };
 use crate::framebuffer::Framebuffer;
+use crate::hud;
 use crate::player::Player;
 use crate::renderer::{self, RenderParams};
 use crate::scene::Scene;
@@ -33,6 +34,13 @@ pub struct App {
     interactive_framebuffer: Framebuffer,
     /// Cuál de los dos framebuffers es el más reciente y debe mostrarse.
     showing_interactive: bool,
+    /// Imagen final que se envía a la ventana: el render (escalado a
+    /// `FB_WIDTH`x`FB_HEIGHT` si es el interactivo) más el HUD encima.
+    display: Vec<u32>,
+    /// Hay que recomponer `display` (nuevo render o cambio en el HUD).
+    display_dirty: bool,
+    /// Panel de controles abierto/cerrado con `M`.
+    show_controls: bool,
     /// Hubo un cambio reciente que todavía no se refinó a calidad completa.
     needs_quality_refine: bool,
     last_change_at: Instant,
@@ -136,6 +144,9 @@ impl App {
             framebuffer,
             interactive_framebuffer,
             showing_interactive: false,
+            display: vec![0; FB_WIDTH * FB_HEIGHT],
+            display_dirty: true,
+            show_controls: false,
             needs_quality_refine: false,
             last_change_at: Instant::now(),
             scene,
@@ -180,6 +191,10 @@ impl App {
             if self.window.is_key_pressed(Key::F1, KeyRepeat::No) {
                 print_controls_help();
             }
+            if self.window.is_key_pressed(Key::M, KeyRepeat::No) {
+                self.show_controls = !self.show_controls;
+                self.display_dirty = true;
+            }
 
             let mut changed = match self.camera_mode {
                 CameraMode::Orbit => self.handle_orbit_input(dt),
@@ -213,6 +228,7 @@ impl App {
                 self.stats
                     .record_interactive(render_start.elapsed().as_secs_f32());
                 self.showing_interactive = true;
+                self.display_dirty = true;
             } else if self.needs_quality_refine
                 && now.duration_since(self.last_change_at).as_secs_f32() >= IDLE_REFINE_DELAY
             {
@@ -223,26 +239,43 @@ impl App {
                     .record_quality(render_start.elapsed().as_secs_f32());
                 self.showing_interactive = false;
                 self.needs_quality_refine = false;
+                self.display_dirty = true;
             }
             self.stats.maybe_report(now);
 
-            let (buffer, width, height) = if self.showing_interactive {
-                (
-                    self.interactive_framebuffer.as_slice(),
-                    self.interactive_framebuffer.width,
-                    self.interactive_framebuffer.height,
-                )
-            } else {
-                (
-                    self.framebuffer.as_slice(),
-                    self.framebuffer.width,
-                    self.framebuffer.height,
-                )
-            };
+            if self.display_dirty {
+                self.compose_display();
+                self.display_dirty = false;
+            }
             self.window
-                .update_with_buffer(buffer, width, height)
+                .update_with_buffer(&self.display, FB_WIDTH, FB_HEIGHT)
                 .expect("failed to update window buffer");
         }
+    }
+
+    /// Copia el último render a `display` (escalando por vecino más cercano
+    /// si es el framebuffer interactivo) y dibuja el HUD encima. Solo se
+    /// llama cuando algo cambió, para no recomponer en cada cuadro quieto.
+    fn compose_display(&mut self) {
+        let source = if self.showing_interactive {
+            &self.interactive_framebuffer
+        } else {
+            &self.framebuffer
+        };
+        let pixels = source.as_slice();
+        for y in 0..FB_HEIGHT {
+            let sy = y * source.height / FB_HEIGHT;
+            let src_row = &pixels[sy * source.width..(sy + 1) * source.width];
+            let dst_row = &mut self.display[y * FB_WIDTH..(y + 1) * FB_WIDTH];
+            for (x, dst) in dst_row.iter_mut().enumerate() {
+                *dst = src_row[x * source.width / FB_WIDTH];
+            }
+        }
+
+        if self.show_controls {
+            hud::draw_controls_panel(&mut self.display, FB_WIDTH, FB_HEIGHT);
+        }
+        hud::draw_hint(&mut self.display, FB_WIDTH, FB_HEIGHT, self.show_controls);
     }
 
     /// Lee teclado y rueda del mouse para orbitar/hacer zoom. Devuelve `true`
@@ -460,7 +493,7 @@ fn print_controls_help() {
     println!(
         "  Z/X/C: madera/piedra/metal | Click izq o Enter: colocar | Click der o Delete: eliminar"
     );
-    println!("F1: mostrar esta ayuda | Escape: salir");
+    println!("M: mostrar/ocultar panel de controles | F1: mostrar esta ayuda | Escape: salir");
 }
 
 impl Default for App {

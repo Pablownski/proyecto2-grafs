@@ -9,6 +9,7 @@ mod config;
 mod cube;
 mod framebuffer;
 mod hit;
+mod hud;
 mod light;
 mod material;
 mod player;
