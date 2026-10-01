@@ -260,7 +260,16 @@ fn build_podium(scene: &mut Scene) {
     // al peldaño real).
     let podium_start_z = 16.4;
     let podium_end_z = 37.0;
-    let height = ENTRANCE_TOP - ISLAND_TOP;
+    // La cara superior se queda un poco por debajo de ENTRANCE_TOP a
+    // propósito: el piso del atrio y otras losas terminan exactamente en
+    // ENTRANCE_TOP, y si el podio llegara hasta ahí sus caras superiores
+    // quedarían coplanares con esas losas. Dos caras opacas en el mismo
+    // plano producen z-fighting (el rayo "elige" al azar cuál golpea
+    // primero por errores de precisión), lo que se ve como estática
+    // parpadeando entre los dos materiales. El hueco queda oculto bajo las
+    // losas de piso, así que no se nota.
+    let top_margin = 0.1;
+    let height = (ENTRANCE_TOP - top_margin) - ISLAND_TOP;
     let size_z = podium_end_z - podium_start_z;
     let center_z = (podium_start_z + podium_end_z) * 0.5;
     add_box(
@@ -396,7 +405,7 @@ fn build_atrium(scene: &mut Scene) {
 
     // Piso oscuro (mate, no mármol reflectivo): un piso grande y plano muy
     // brillante genera ruido de aliasing especular con 1 rayo por píxel.
-    add_box(
+    let atrium_floor = add_box(
         scene,
         vec3(
             0.0,
@@ -406,6 +415,11 @@ fn build_atrium(scene: &mut Scene) {
         vec3(width, 0.3, depth),
         MATTE_FLOOR,
     );
+    // Una sola instancia de la textura en vez de mosaico: en ángulos muy
+    // rasantes (vista de jugador cerca del piso) muchos tiles caen en un
+    // mismo píxel y el muestreo nearest-neighbor sin mipmaps produce ruido
+    // tipo estática. Con poca repetición ese aliasing casi desaparece.
+    scene.cubes[atrium_floor].uv_scale = vec2(1.0, 1.0);
     add_box(
         scene,
         vec3(
@@ -476,36 +490,57 @@ fn build_atrium(scene: &mut Scene) {
     // Balcones de segundo nivel a lo largo de las paredes laterales, con
     // barandal, y escaleras laterales que suben desde la planta baja.
     let balcony_y = ATRIUM_FLOOR_Y + side_height * 0.5;
+
+    // Geometría de la escalera, calculada primero: el piso del balcón debe
+    // dejar un hueco (no puede cubrir toda la profundidad) justo encima de
+    // los últimos escalones. Antes cubría toda la corrida y su cara inferior
+    // coincidía exactamente con el borde superior del último escalón: el
+    // jugador chocaba contra el piso del balcón antes de poder subir.
+    const STAIR_STEPS: usize = 10;
+    const STAIR_STEP_DEPTH: f32 = 0.6;
+    const STAIR_STEP_RISE: f32 = 0.5;
+    let stair_start_z = ATRIUM_FRONT_Z + 1.2;
+    let stair_last_tread_end_z =
+        stair_start_z + STAIR_STEP_DEPTH * (STAIR_STEPS - 1) as f32 + STAIR_STEP_DEPTH * 0.5;
+
+    // El piso del balcón empieza justo donde termina el último escalón (sin
+    // separación: un hueco ahí dejaría al jugador cayendo al vacío) y llega
+    // hasta la cara interior de la pared trasera, para no quedar corto.
+    let floor_start_z = stair_last_tread_end_z;
+    let floor_end_z = ATRIUM_BACK_Z - WALL_THICK * 0.5;
+    let floor_len = (floor_end_z - floor_start_z).max(1.0);
+    let floor_center_z = (floor_start_z + floor_end_z) * 0.5;
+
     for &(x_wall, sign) in &[(ATRIUM_MIN_X, 1.0f32), (ATRIUM_MAX_X, -1.0f32)] {
         let ledge_center_x = x_wall + sign * 1.5;
-        add_box(
+        let balcony_floor = add_box(
             scene,
-            vec3(
-                ledge_center_x,
-                balcony_y + 0.15,
-                (ATRIUM_FRONT_Z + ATRIUM_BACK_Z) * 0.5,
-            ),
-            vec3(3.0, 0.3, depth - 2.0),
+            vec3(ledge_center_x, balcony_y + 0.15, floor_center_z),
+            vec3(3.0, 0.3, floor_len),
             MATTE_FLOOR,
         );
+        // Igual que el piso del atrio: sin mosaico, para evitar el aliasing
+        // de textura a ángulos rasantes.
+        scene.cubes[balcony_floor].uv_scale = vec2(1.0, 1.0);
         let rail_x = x_wall + sign * 3.0;
         add_box(
             scene,
-            vec3(
-                rail_x,
-                balcony_y + 0.7,
-                (ATRIUM_FRONT_Z + ATRIUM_BACK_Z) * 0.5,
-            ),
-            vec3(0.15, 0.8, depth - 2.0),
+            vec3(rail_x, balcony_y + 0.7, floor_center_z),
+            vec3(0.15, 0.8, floor_len),
             MARBLE,
         );
 
+        // La escalera debe llegar hasta la cara interior de la pared lateral
+        // (sin hueco): si queda separada, el jugador se cae por ese costado
+        // abierto al subir. Se ensancha y se recorre para tocar la pared.
+        const STAIR_WIDTH: f32 = 1.8;
+        let stair_center_x = x_wall + sign * (WALL_THICK * 0.5 + STAIR_WIDTH * 0.5);
         add_steps(
             scene,
-            vec3(x_wall + sign * 1.5, ATRIUM_FLOOR_Y, ATRIUM_FRONT_Z + 1.2),
-            10,
-            vec3(1.2, 0.5, 0.8),
-            vec3(0.0, 0.5, 0.8),
+            vec3(stair_center_x, ATRIUM_FLOOR_Y, stair_start_z),
+            STAIR_STEPS,
+            vec3(STAIR_WIDTH, STAIR_STEP_RISE, STAIR_STEP_DEPTH),
+            vec3(0.0, STAIR_STEP_RISE, STAIR_STEP_DEPTH),
             STONE,
         );
     }
@@ -556,16 +591,25 @@ fn build_office(scene: &mut Scene) {
     let height = OFFICE_CEILING_Y - OFFICE_FLOOR_Y;
 
     // Corredor corto que conecta la puerta trasera del atrio con la oficina.
+    let corridor_z = (ATRIUM_BACK_Z + OFFICE_FRONT_Z) * 0.5;
+    let corridor_len = OFFICE_FRONT_Z - ATRIUM_BACK_Z;
     add_box(
         scene,
-        vec3(
-            0.0,
-            OFFICE_FLOOR_Y - 0.15,
-            (ATRIUM_BACK_Z + OFFICE_FRONT_Z) * 0.5,
-        ),
-        vec3(3.0, 0.3, OFFICE_FRONT_Z - ATRIUM_BACK_Z),
+        vec3(0.0, OFFICE_FLOOR_Y - 0.15, corridor_z),
+        vec3(3.0, 0.3, corridor_len),
         WOOD,
     );
+    // Paredes laterales del corredor: sin esto, aunque el atrio y la
+    // oficina ya estén cerrados, el tramo entre sus dos puertas queda
+    // abierto por los costados (solo tenía piso).
+    for x in [-1.5, 1.5] {
+        add_box(
+            scene,
+            vec3(x, OFFICE_FLOOR_Y + height * 0.5, corridor_z),
+            vec3(WALL_THICK, height, corridor_len),
+            WOOD,
+        );
+    }
 
     // Piso de madera y techo.
     add_box(
@@ -592,6 +636,21 @@ fn build_office(scene: &mut Scene) {
         scene,
         vec3(OFFICE_MAX_X, OFFICE_FLOOR_Y + height * 0.5, center_z),
         vec3(WALL_THICK, height, depth),
+        WOOD,
+    );
+
+    // Pared frontal con la puerta alineada al corredor (3.0 de ancho): sin
+    // esto la oficina (8 de ancho) queda abierta por los costados del
+    // frente, donde es más ancha que el corredor que la conecta al atrio.
+    add_wall_with_doorway(
+        scene,
+        OFFICE_FRONT_Z,
+        OFFICE_MIN_X,
+        OFFICE_MAX_X,
+        OFFICE_FLOOR_Y,
+        OFFICE_CEILING_Y,
+        1.5,
+        OFFICE_FLOOR_Y + 3.5,
         WOOD,
     );
 
@@ -663,10 +722,13 @@ fn build_office(scene: &mut Scene) {
         OFFICE_BACK_Z - 1.3,
     );
     add_box(scene, chest_pos, vec3(0.9, 0.7, 0.6), CHEST);
+    // La oficina es un cuarto pequeño (8x4x7): con la cámara cerca del
+    // cofre, una intensidad pensada para espacios más grandes (como el
+    // atrio) se ve como una bombilla quemada.
     scene.lights.push(Light::Point {
         position: chest_pos + vec3(0.0, 0.8, 0.0),
         color: Color::new(1.0, 0.8, 0.4),
-        intensity: 12.0,
+        intensity: 1.6,
     });
 }
 

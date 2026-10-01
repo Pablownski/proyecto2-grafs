@@ -55,6 +55,29 @@ fn black_marble() -> RgbImage {
     img
 }
 
+/// Piso interior oscuro y liso: sin ruido aleatorio por texel. Cualquier
+/// ruido de alta frecuencia (aunque sea de poca amplitud) genera estática al
+/// submuestrearse en ángulos muy rasantes (vista de jugador cerca del piso),
+/// porque nearest-neighbor sin mipmaps no puede promediar texels vecinos.
+/// Solo un degradado suave de muy baja frecuencia, seguro de submuestrear.
+fn matte_floor() -> RgbImage {
+    let mut img = RgbImage::new(SIZE, SIZE);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let fx = x as f32 / SIZE as f32;
+            let fy = y as f32 / SIZE as f32;
+            let shade = ((fx * 1.5).sin() * 0.5 + 0.5) * ((fy * 1.5).sin() * 0.5 + 0.5);
+            let v = 0.09 + shade * 0.03;
+            img.put_pixel(
+                x,
+                y,
+                Rgb([to_u8(v * 0.9), to_u8(v * 0.95), to_u8(v * 1.05)]),
+            );
+        }
+    }
+    img
+}
+
 fn wood_panel() -> RgbImage {
     let mut img = RgbImage::new(SIZE, SIZE);
     for y in 0..SIZE {
@@ -267,7 +290,7 @@ fn main() {
     let dir = "assets/textures";
     std::fs::create_dir_all(dir).expect("failed to create assets/textures");
 
-    let textures: [(&str, Generator); 8] = [
+    let textures: [(&str, Generator); 9] = [
         ("agency_stone.png", agency_stone),
         ("black_marble.png", black_marble),
         ("wood_panel.png", wood_panel),
@@ -276,6 +299,7 @@ fn main() {
         ("grass.png", grass),
         ("water.png", water),
         ("screen.png", screen),
+        ("matte_floor.png", matte_floor),
     ];
 
     for (name, generator) in textures {

@@ -17,6 +17,11 @@ const MAX_PIECES: usize = 100;
 /// Desplaza el punto de impacto hacia afuera de la superficie apuntada,
 /// antes de ajustarlo a la cuadrícula (paso 3 de la sección 11.2).
 const SURFACE_OFFSET: f32 = 0.05;
+/// Margen que se tolera al comprobar solape con geometría estática: la
+/// cuadrícula de construcción (0.5) no coincide con el paso de escalones u
+/// otras formas irregulares, así que una pieza que apenas roza el borde de
+/// algo (p. ej. el último escalón) no debería invalidarse por eso.
+const STATIC_OVERLAP_TOLERANCE: f32 = 0.12;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PieceKind {
@@ -173,10 +178,23 @@ pub fn validate_placement(scene: &Scene, player: &Player, pieces: &[Cube]) -> bo
         if overlaps(piece.min, piece.max, player_min, player_max) {
             return false;
         }
+        // Encoge un poco la pieza solo para este chequeo: la cuadrícula de
+        // construcción no coincide con formas irregulares como los
+        // escalones, así que tocar apenas el borde de algo no debería
+        // invalidar la colocación (solo una intersección real sí). El
+        // margen se limita a no invertir cubos delgados (p. ej. paredes).
+        let size = piece.max - piece.min;
+        let margin = vec3(
+            STATIC_OVERLAP_TOLERANCE.min(size.x * 0.45),
+            STATIC_OVERLAP_TOLERANCE.min(size.y * 0.45),
+            STATIC_OVERLAP_TOLERANCE.min(size.z * 0.45),
+        );
+        let shrunk_min = piece.min + margin;
+        let shrunk_max = piece.max - margin;
         if scene
             .cubes
             .iter()
-            .any(|cube| overlaps(piece.min, piece.max, cube.min, cube.max))
+            .any(|cube| overlaps(shrunk_min, shrunk_max, cube.min, cube.max))
         {
             return false;
         }
@@ -267,5 +285,19 @@ mod tests {
         let player = Player::new(vec3(10.0, -1.2, 10.0), 0.0);
         let pieces = piece_cubes(PieceKind::Floor, vec3(0.0, 0.0, 0.0), 0, 0);
         assert!(!validate_placement(&scene, &player, &pieces));
+    }
+
+    #[test]
+    fn placement_merely_grazing_static_geometry_is_valid() {
+        // El piso queda en x=[-1.5, 1.5]; este cubo estático solo se le mete
+        // 0.05 unidades (menos que STATIC_OVERLAP_TOLERANCE), como pasaría
+        // al construir justo junto al borde de un escalón irregular.
+        let mut scene = Scene::new();
+        scene
+            .cubes
+            .push(Cube::new(vec3(1.45, -1.0, -1.0), vec3(2.5, 1.0, 1.0), 0));
+        let player = Player::new(vec3(10.0, -1.2, 10.0), 0.0);
+        let pieces = piece_cubes(PieceKind::Floor, vec3(0.0, 0.0, 0.0), 0, 0);
+        assert!(validate_placement(&scene, &player, &pieces));
     }
 }

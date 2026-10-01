@@ -200,14 +200,16 @@ pub fn load_preview_materials(textures: &mut TextureManager) -> Vec<Material> {
 }
 
 /// Piso oscuro mate para el atrio: mismo tono que el mármol negro, pero sin
-/// especular/reflectividad. Un piso grande, plano y muy brillante con un
-/// solo rayo por píxel produce "aliasing especular" (ruido tipo estática)
-/// que ni bajar la reflectividad del mármol resolvía del todo; el mármol
-/// reflectivo se conserva en columnas, barandales y la escultura.
+/// especular/reflectividad y con una textura propia sin ruido aleatorio por
+/// texel (`matte_floor.png`). Cualquier ruido de alta frecuencia, aunque sea
+/// de poca amplitud, genera estática al submuestrearse en ángulos rasantes
+/// (vista de jugador cerca del piso) porque el muestreo nearest-neighbor no
+/// promedia texels vecinos; el mármol reflectivo y con vetas se conserva en
+/// columnas, barandales y la escultura.
 pub fn load_interior_materials(textures: &mut TextureManager) -> Vec<Material> {
     vec![Material::new(
         "Piso oscuro mate",
-        textures.load("assets/textures/black_marble.png"),
+        textures.load("assets/textures/matte_floor.png"),
         Color::new(0.12, 0.14, 0.18),
         0.05,
         8.0,

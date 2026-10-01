@@ -290,11 +290,17 @@ impl App {
     fn handle_first_person_input(&mut self, dt: f32) -> bool {
         let mut delta_yaw = 0.0f32;
         let mut delta_pitch = 0.0f32;
+        // Signo invertido a propósito respecto a `handle_orbit_input`: en
+        // `Player::look_direction`/`forward_flat`, yaw creciente gira la
+        // vista hacia +X, que es el lado izquierdo de la pantalla (el
+        // vector "derecha" ya validado por el render es -X, el mismo que
+        // usa `RenderParams::look_at`). Con el signo original, la flecha
+        // derecha giraba la vista hacia la izquierda y viceversa.
         if self.window.is_key_down(Key::Left) {
-            delta_yaw -= PLAYER_LOOK_YAW_SPEED * dt;
+            delta_yaw += PLAYER_LOOK_YAW_SPEED * dt;
         }
         if self.window.is_key_down(Key::Right) {
-            delta_yaw += PLAYER_LOOK_YAW_SPEED * dt;
+            delta_yaw -= PLAYER_LOOK_YAW_SPEED * dt;
         }
         if self.window.is_key_down(Key::Up) {
             delta_pitch += PLAYER_LOOK_PITCH_SPEED * dt;

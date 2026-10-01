@@ -50,8 +50,8 @@ pub const COLLISION_MARGIN: f32 = 0.01;
 // quieta un instante corto se refina a `FB_WIDTH`/`FB_HEIGHT`/`MAX_TRACE_DEPTH`.
 // Fija (no depende de `FB_WIDTH`/`FB_HEIGHT`) para que subir la resolución de
 // calidad no vuelva pesado el modo interactivo.
-pub const INTERACTIVE_FB_WIDTH: usize = 200;
-pub const INTERACTIVE_FB_HEIGHT: usize = 112;
+pub const INTERACTIVE_FB_WIDTH: usize = 300;
+pub const INTERACTIVE_FB_HEIGHT: usize = 169;
 pub const INTERACTIVE_TRACE_DEPTH: u32 = 2;
 /// Tiempo de quietud antes de volver a renderizar con calidad completa.
 pub const IDLE_REFINE_DELAY: f32 = 0.25;
